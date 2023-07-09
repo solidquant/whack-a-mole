@@ -1,6 +1,12 @@
 # Whack-A-Mole
 
-CEX-DEX arbitrage bot written in Python.
+![Dugtrio](https://github.com/solidquant/whack-a-mole/assets/134243834/841a91df-728b-489b-b4af-4af948c03c35)
+
+The image is of Dugtrio from Pokemon.
+
+### What the heck?
+
+Whack-A-Mole is a CEX-DEX arbitrage bot written in Python.
 
 Arbitrage strategies are like the global Whack-A-Mole game played in parallel.
 
@@ -10,3 +16,5 @@ Who knows who'll win...
 
 What we know for certain is that you'll need a fast pair of eyes on the market at all times,
 and an extra fast execution engine to capture the moment without latency.
+
+Will our beloved Python be able to accomplish this? We'll see 😎
