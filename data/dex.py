@@ -1,4 +1,3 @@
-import itertools
 import numpy as np
 from web3 import Web3
 from typing import Any, Dict, List
