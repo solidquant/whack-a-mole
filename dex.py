@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 from web3 import Web3
 from typing import Any, Dict, List
@@ -99,10 +100,18 @@ class DexBase:
         ex) {'ethereum': [(0, 0, 1, 2, 0), ...]
         """
         self.storage_index = {c: [] for c in self.chains_list}
-        self.swap_paths = {
-            c: {s: None for s in self.trading_symbols}
-            for c in self.chains_list
-        }
+
+        """
+        swap_paths
+        : contains information about swap paths, tokens involved, price, fee
+        : Filled in _generate_swap_paths()
+
+        ex) {'ETH/USDT': {'path': np.ndarray,
+                          'tokens': np.ndarray,
+                          'price': np.ndarray
+                          'fee': np.ndarray}, ...}
+        """
+        self.swap_paths = {s: None for s in self.trading_symbols}
 
         self._load_pool_data()
         self._generate_swap_paths()
@@ -192,6 +201,8 @@ class DexBase:
             for symbol in self.trading_symbols
         }
 
+        chain_swap_paths = {}
+
         for chain, index in self.storage_index.items():
             index_arr = np.array(index)
 
@@ -208,19 +219,29 @@ class DexBase:
 
                 paths_arr = np.array(paths)
                 if paths_arr.shape[0] != 0:
-                    _tokens_involved = paths_arr[:, :, [2, 3]].reshape(-1, 2)
-                    tokens_involved = np.unique(_tokens_involved[~np.all(_tokens_involved == 0, axis=1)])
-                    symbol_swap_paths[symbol] = {
-                        'path': paths_arr,
-                        'tokens': list(tokens_involved)
-                    }
+                    symbol_swap_paths[symbol] = paths_arr
                 else:
-                    symbol_swap_paths[symbol] = {
-                        'path': paths_arr.reshape((0, 3, 5)).astype(np.int64),
-                        'tokens': []
-                    }
+                    symbol_swap_paths[symbol] = paths_arr.reshape((0, 3, 5)).astype(np.int64)
 
-            self.swap_paths[chain] = symbol_swap_paths
+            chain_swap_paths[chain] = symbol_swap_paths
+
+        # concatenate the paths generated for each chain
+        for symbol in self.trading_symbols:
+            symbol_paths_list = [chain_swap_paths[chain][symbol] for chain in self.chains_list]
+            symbol_paths_array = np.concatenate(symbol_paths_list)
+
+            _tokens_involved = symbol_paths_array[:, :, [TOKEN_IN, TOKEN_OUT]].reshape(-1, 2)
+            tokens_involved = np.unique(_tokens_involved[~np.all(_tokens_involved == 0, axis=1)])
+
+            price_arr = np.zeros(symbol_paths_array.shape[0])
+            fee_arr = np.zeros(symbol_paths_array.shape[0])
+
+            self.swap_paths[symbol] = {
+                'path': symbol_paths_array,
+                'tokens': tokens_involved,
+                'price': price_arr,
+                'fee': fee_arr,
+            }
 
     def __sample_pools(self, index_arr: np.ndarray, in_out: List[int]) -> Dict[int, List[List[List[int]]]]:
         # Step #1
@@ -283,9 +304,9 @@ class DexBase:
             :param _n_total_hops: the number of hops you are trying to sample. ex) 1, 2, 3, ...
             :param _nth_hop: out of the _n_total_hops which _nth_hop are you on
             :param _prev_pool: the previous pool index. ex) (0, 0, 1, 2, 0)
-            :param _sampled: the sampled pools we should append to paths_list
+            :param _sampled: the sampled pools we should append to _paths
             :param _pool_samples: pool_samples we made from the above sampling process
-            :param path: the list that collects all viable combination of pools
+            :param _paths: the list that collects all viable combination of pools
             """
 
             for _p in _pool_samples[_n_total_hops][_nth_hop]:
@@ -336,6 +357,15 @@ class DexBase:
         return paths
 
 
+class NoSymbolError(Exception):
+
+    def __init__(self, msg: str):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
+
+
 class DEX(DexBase):
 
     def __init__(self,
@@ -350,6 +380,9 @@ class DEX(DexBase):
                          pools,
                          trading_symbols,
                          max_swap_number)
+
+        for symbol in self.trading_symbols:
+            self.update_price_for_symbol(symbol)
 
     def get_index(self,
                   chain: str,
@@ -381,6 +414,29 @@ class DEX(DexBase):
             price = sqrt_to_price(sqrt, dec0, dec1, tok)
 
         return price, fee
+
+    def update_price_for_symbol(self, symbol: str):
+        if symbol not in self.trading_symbols:
+            raise NoSymbolError(f'{symbol} not in {self.trading_symbols}')
+
+        paths_arr = self.swap_paths[symbol]['path']
+        price_arr = self.swap_paths[symbol]['price']
+        fee_arr = self.swap_paths[symbol]['fee']  # you should only update fee once
+
+        for i in np.arange(paths_arr.shape[0]):
+            path = paths_arr[i]
+            price = 1
+            fee = 1
+            for p_step in np.arange(path.shape[0]):
+                idx = path[p_step]
+                if np.sum(idx) == 0:
+                    break
+                _p, _f = self.get_price(*idx)
+                price = price * (1 / _p)  # flip price ratio
+                fee = fee * (1 - _f)
+
+            price_arr[i] = price
+            fee_arr[i] = 1 - fee
 
 
 # Uniswap math utility functions
@@ -419,6 +475,3 @@ if __name__ == '__main__':
               TOKENS,
               POOLS,
               TRADING_SYMBOLS)
-    idx = dex.get_index('ethereum', 'uniswap', 'ETH', 'USDT', 3)
-    price = dex.get_price(*idx)
-    print(price)
