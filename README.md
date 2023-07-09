@@ -1,6 +1,8 @@
 # Whack-A-Mole
 
-![Dugtrio](https://github.com/solidquant/whack-a-mole/assets/134243834/841a91df-728b-489b-b4af-4af948c03c35)
+<p align="center">
+    <img src = "https://github.com/solidquant/whack-a-mole/assets/134243834/841a91df-728b-489b-b4af-4af948c03c35" width="450px">
+</p>
 
 The image is of Dugtrio from Pokemon.
 
