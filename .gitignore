@@ -1,0 +1,12 @@
+.env
+
+.DS_Store
+
+.idea/
+
+venv/
+__pycache__/
+
+*.pyc
+*.zip
+*.csv
