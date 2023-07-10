@@ -495,7 +495,7 @@ class DEX(DexBase):
                           token1: str,
                           sqrt_price: float):
 
-        idx_1 = self.get_index(chain, exchange, token0, token1, 2)
+        idx_1 = self.get_index(chain, exchange, token0, token1, 3)
         idx_2 = (idx_1[0], idx_1[1], idx_1[3], idx_1[2], idx_1[4])
 
         storage_1 = self.storage_array[idx_1]
@@ -512,11 +512,11 @@ class DEX(DexBase):
                       exchange: str,
                       token0: str,
                       token1: str,
-                      version: int):
+                      version: int) -> str:
 
         idx = self.get_index(chain, exchange, token0, token1, version)
         price, _ = self.get_price(*idx)
-        print(f'[{chain}] {exchange} V{version}: {token0} -> {token1} @{price} / {token1} -> {token0} @{1 / price}')
+        return f'[{chain}] {exchange} V{version}: {token0}/{token1} @{price} & {token1}/{token0} @{1 / price}'
 
 
 # Uniswap math utility functions
