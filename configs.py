@@ -8,6 +8,11 @@ RPC_ENDPOINTS = {
     'polygon': os.getenv('POLYGON_HTTP_RPC_URL'),
 }
 
+WS_ENDPOINTS = {
+    'ethereum': os.getenv('ETHEREUM_WS_RPC_URL'),
+    'polygon': os.getenv('POLYGON_WS_RPC_URL'),
+}
+
 TRADING_SYMBOLS = [
     'BTC/USDT',
     'ETH/USDT',

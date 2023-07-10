@@ -20,7 +20,7 @@ RESERVE0 = 2
 RESERVE1 = 3
 SQRT_PRICE = 4
 FEE = 5
-INPUT_TOKEN = 6
+TOKEN_IN_IS_TOKEN0 = 6
 
 
 class DexBase:
@@ -187,8 +187,8 @@ class DexBase:
                 sqrt_price = storage_data[0]
                 data = [decimals0, decimals1, 0, 0, sqrt_price, fee]
 
-            self.storage_array[idx_1] = data + [0]  # token0 in
-            self.storage_array[idx_2] = data + [1]  # token1 in
+            self.storage_array[idx_1] = data + [1]  # token_in is token0
+            self.storage_array[idx_2] = data + [0]  # token_in is not token0
 
     def _generate_swap_paths(self):
         """
@@ -405,14 +405,34 @@ class DEX(DexBase):
                   v: int) -> tuple:
 
         idx = (c, e, t0, t1, v)
-        dec0, dec1, res0, res1, sqrt, fee, tok = self.storage_array[idx]
+        dec0, dec1, res0, res1, sqrt, fee, tok0 = self.storage_array[idx]
 
         if v == V2:
-            price = reserves_to_price(res0, res1, dec0, dec1, tok)
+            price = reserves_to_price(res0, res1, dec0, dec1, tok0)
         else:
-            price = sqrt_to_price(sqrt, dec0, dec1, tok)
+            price = sqrt_to_price(sqrt, dec0, dec1, tok0)
 
         return price, fee
+
+    def get_symbols_to_update(self, token0: str, token1: str) -> List[str]:
+        """
+        Returns the symbols that need to be updated after
+        token0, token1 storage information have been updated
+
+        This is used in DexStream to figure out which symbols to update the price for
+        after receiving Sync, Swap events from Uniswap V2, V3 variant exchanges
+        """
+        token0_id = self.token_to_id[token0]
+        token1_id = self.token_to_id[token1]
+
+        symbols_to_update = []
+
+        for symbol in self.trading_symbols:
+            tokens_involved = self.swap_paths[symbol]['tokens']
+            if token0_id in tokens_involved or token1_id in tokens_involved:
+                symbols_to_update.append(symbol)
+
+        return symbols_to_update
 
     def update_price_for_symbol(self, symbol: str):
         if symbol not in self.trading_symbols:
@@ -420,7 +440,7 @@ class DEX(DexBase):
 
         paths_arr = self.swap_paths[symbol]['path']
         price_arr = self.swap_paths[symbol]['price']
-        fee_arr = self.swap_paths[symbol]['fee']  # you should only update fee once
+        fee_arr = self.swap_paths[symbol]['fee']
 
         for i in np.arange(paths_arr.shape[0]):
             path = paths_arr[i]
@@ -431,11 +451,72 @@ class DEX(DexBase):
                 if np.sum(idx) == 0:
                     break
                 _p, _f = self.get_price(*idx)
-                price = price * (1 / _p)  # flip price ratio
+                """
+                Take the inverse of price.
+                This is needed because if you are trying to BUY ETH with USDT,
+                then token_in will be USDT, and token_out will be ETH.
+                Thus, the quote amount of ETH you get for providing 1 USDT is currently: 0.0005387 ETH.
+                However, we want the price to be ETH/USDT = 1856.32 USDT.
+                To get this value, we take the inverse of price.
+                1 / 0.0005387 = 1856.32
+                """
+                price = price * (1 / _p)
                 fee = fee * (1 - _f)
 
             price_arr[i] = price
             fee_arr[i] = 1 - fee
+
+    def update_reserves(self,
+                        chain: str,
+                        exchange: str,
+                        token0: str,
+                        token1: str,
+                        reserve0: float,
+                        reserve1: float):
+
+        idx_1 = self.get_index(chain, exchange, token0, token1, 2)
+        idx_2 = (idx_1[0], idx_1[1], idx_1[3], idx_1[2], idx_1[4])
+
+        storage_1 = self.storage_array[idx_1]
+        storage_1[RESERVE0] = reserve0
+        storage_1[RESERVE1] = reserve1
+
+        storage_2 = self.storage_array[idx_2]
+        storage_2[RESERVE0] = reserve0
+        storage_2[RESERVE1] = reserve1
+
+        self.storage_array[idx_1] = storage_1
+        self.storage_array[idx_2] = storage_2
+
+    def update_sqrt_price(self,
+                          chain: str,
+                          exchange: str,
+                          token0: str,
+                          token1: str,
+                          sqrt_price: float):
+
+        idx_1 = self.get_index(chain, exchange, token0, token1, 2)
+        idx_2 = (idx_1[0], idx_1[1], idx_1[3], idx_1[2], idx_1[4])
+
+        storage_1 = self.storage_array[idx_1]
+        storage_1[SQRT_PRICE] = sqrt_price
+
+        storage_2 = self.storage_array[idx_2]
+        storage_2[SQRT_PRICE] = sqrt_price
+
+        self.storage_array[idx_1] = storage_1
+        self.storage_array[idx_2] = storage_2
+
+    def debug_message(self,
+                      chain: str,
+                      exchange: str,
+                      token0: str,
+                      token1: str,
+                      version: int):
+
+        idx = self.get_index(chain, exchange, token0, token1, version)
+        price, _ = self.get_price(*idx)
+        print(f'[{chain}] {exchange} V{version}: {token0} -> {token1} @{price} / {token1} -> {token0} @{1 / price}')
 
 
 # Uniswap math utility functions
@@ -443,7 +524,7 @@ class DEX(DexBase):
 def sqrt_to_price(sqrt: float,
                   decimals0: float,
                   decimals1: float,
-                  input_token: int) -> float:
+                  token_in_is_token0: int) -> float:
     """
     Uniswap V3 variant calculation of price
     """
@@ -452,19 +533,19 @@ def sqrt_to_price(sqrt: float,
     ratio = numerator / denominator
     shift_decimals = 10 ** (decimals0 - decimals1)
     ratio *= shift_decimals
-    return ratio if input_token == 0 else 1 / ratio
+    return ratio if token_in_is_token0 == 1 else 1 / ratio
 
 
 def reserves_to_price(reserve0: float,
                       reserve1: float,
                       decimals0: float,
                       decimals1: float,
-                      input_token: int) -> float:
+                      token_in_is_token0: int) -> float:
     """
     Uniswap V2 variant calculation of price
     """
     ratio = reserve1 / reserve0 * 10 ** (decimals0 - decimals1)
-    return ratio if input_token == 0 else 1 / ratio
+    return ratio if token_in_is_token0 == 1 else 1 / ratio
 
 
 if __name__ == '__main__':

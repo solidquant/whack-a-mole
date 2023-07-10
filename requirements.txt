@@ -1,4 +1,5 @@
 aiohttp==3.8.4
+aioprocessing==2.0.1
 aiosignal==1.3.1
 async-timeout==4.0.2
 attrs==23.1.0
@@ -26,6 +27,7 @@ lru-dict==1.2.0
 multiaddr==0.0.9
 multicall==0.7.4
 multidict==6.0.4
+nest-asyncio==1.5.6
 netaddr==0.8.0
 numpy==1.25.0
 parsimonious==0.8.1
@@ -42,5 +44,5 @@ typing_extensions==4.7.1
 urllib3==2.0.3
 varint==1.0.2
 web3==5.31.4
-websockets==9.1
+websockets==11.0.3
 yarl==1.9.2
