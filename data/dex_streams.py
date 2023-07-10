@@ -43,10 +43,12 @@ class DexStream:
 
         for chain in self.dex.chains_list:
             v2_stream = reconnecting_websocket_loop(
-                partial(self.stream_uniswap_v2_events, chain)
+                partial(self.stream_uniswap_v2_events, chain),
+                tag=f'{chain.upper()}_V2'
             )
             v3_stream = reconnecting_websocket_loop(
-                partial(self.stream_uniswap_v3_events, chain)
+                partial(self.stream_uniswap_v3_events, chain),
+                tag=f'{chain.upper()}_V3'
             )
             streams.extend([asyncio.ensure_future(f) for f in [v2_stream, v3_stream]])
 

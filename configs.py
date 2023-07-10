@@ -184,3 +184,5 @@ POOLS = [
     #     'token1': 'USDC',
     # },
 ]
+
+CEX_LIST = ['binance', 'okx', 'bybit']
