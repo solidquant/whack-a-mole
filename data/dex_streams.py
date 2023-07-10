@@ -7,7 +7,7 @@ import eth_utils
 import websockets
 import aioprocessing
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from data.dex import DEX
 from data.utils import reconnecting_websocket_loop
@@ -100,7 +100,16 @@ class DexStream:
 
                     symbols = self.dex.get_symbols_to_update(token0, token1)
                     for symbol in symbols:
-                        self.dex.update_price_for_symbol(symbol)
+                        self.dex.update_price_for_symbol(chain, symbol)
+
+                    self.publish({
+                        'source': 'dex',
+                        'symbol': symbol,
+                        # 'path': self.dex.swap_paths[symbol]['path'].tolist(),
+                        'tag': self.dex.swap_paths[symbol]['tag'],
+                        'price': self.dex.swap_paths[symbol]['price'].tolist(),
+                        'fee': self.dex.swap_paths[symbol]['fee'].tolist(),
+                    })
                     e = time.time()
 
                     if self.debug:
@@ -155,7 +164,16 @@ class DexStream:
 
                     symbols = self.dex.get_symbols_to_update(token0, token1)
                     for symbol in symbols:
-                        self.dex.update_price_for_symbol(symbol)
+                        self.dex.update_price_for_symbol(chain, symbol)
+
+                    self.publish({
+                        'source': 'dex',
+                        'symbol': symbol,
+                        # 'path': self.dex.swap_paths[symbol]['path'].tolist(),
+                        'tag': self.dex.swap_paths[symbol]['tag'],
+                        'price': self.dex.swap_paths[symbol]['price'].tolist(),
+                        'fee': self.dex.swap_paths[symbol]['fee'].tolist(),
+                    })
                     e = time.time()
 
                     if self.debug:
@@ -172,8 +190,6 @@ if __name__ == '__main__':
         TRADING_SYMBOLS,
     )
 
-    # nest_asyncio.apply()
-
     dex = DEX(RPC_ENDPOINTS,
               TOKENS,
               POOLS,
@@ -181,5 +197,5 @@ if __name__ == '__main__':
 
     queue = aioprocessing.AioQueue()
 
-    dex_stream = DexStream(dex, WS_ENDPOINTS, queue, True)
+    dex_stream = DexStream(dex, WS_ENDPOINTS, queue, False)
     dex_stream.start_streams()

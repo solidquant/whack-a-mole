@@ -102,10 +102,11 @@ class DexBase:
 
         """
         swap_paths
-        : contains information about swap paths, tokens involved, price, fee
+        : contains information about swap paths, tags, tokens involved, price, fee
         : Filled in _generate_swap_paths()
 
         ex) {'ETH/USDT': {'path': np.ndarray,
+                          'tag': List[str],
                           'tokens': np.ndarray,
                           'price': np.ndarray
                           'fee': np.ndarray}, ...}
@@ -229,14 +230,29 @@ class DexBase:
             symbol_paths_list = [chain_swap_paths[chain][symbol] for chain in self.chains_list]
             symbol_paths_array = np.concatenate(symbol_paths_list)
 
+            # get unique tokens from pool index that isn't all 0's
             _tokens_involved = symbol_paths_array[:, :, [TOKEN_IN, TOKEN_OUT]].reshape(-1, 2)
             tokens_involved = np.unique(_tokens_involved[~np.all(_tokens_involved == 0, axis=1)])
 
             price_arr = np.zeros(symbol_paths_array.shape[0])
             fee_arr = np.zeros(symbol_paths_array.shape[0])
 
+            """
+            Create a path tag for easy reference/debugging
+            Each tag will look like: ethereum-0, ethereum-1, polygon-0, ...
+            """
+            chain_path_counter = {chain: 0 for chain in self.chains_list}
+            tags = []
+            for i in np.arange(symbol_paths_array.shape[0]):
+                chain_idx = symbol_paths_array[i][0][0]
+                chain = self.chains_list[chain_idx]
+                tag = f'{chain}-{chain_path_counter[chain]}'
+                chain_path_counter[chain] += 1
+                tags.append(tag)
+
             self.swap_paths[symbol] = {
                 'path': symbol_paths_array,
+                'tag': tags,
                 'tokens': tokens_involved,
                 'price': price_arr,
                 'fee': fee_arr,
@@ -380,8 +396,9 @@ class DEX(DexBase):
                          trading_symbols,
                          max_swap_number)
 
-        for symbol in self.trading_symbols:
-            self.update_price_for_symbol(symbol)
+        for chain in self.chains_list:
+            for symbol in self.trading_symbols:
+                self.update_price_for_symbol(chain, symbol)
 
     def get_index(self,
                   chain: str,
@@ -434,9 +451,11 @@ class DEX(DexBase):
 
         return symbols_to_update
 
-    def update_price_for_symbol(self, symbol: str):
+    def update_price_for_symbol(self, chain: str, symbol: str):
         if symbol not in self.trading_symbols:
             raise NoSymbolError(f'{symbol} not in {self.trading_symbols}')
+
+        chain_idx = self.chain_to_id[chain]
 
         paths_arr = self.swap_paths[symbol]['path']
         price_arr = self.swap_paths[symbol]['price']
@@ -444,27 +463,32 @@ class DEX(DexBase):
 
         for i in np.arange(paths_arr.shape[0]):
             path = paths_arr[i]
-            price = 1
-            fee = 1
-            for p_step in np.arange(path.shape[0]):
-                idx = path[p_step]
-                if np.sum(idx) == 0:
-                    break
-                _p, _f = self.get_price(*idx)
-                """
-                Take the inverse of price.
-                This is needed because if you are trying to BUY ETH with USDT,
-                then token_in will be USDT, and token_out will be ETH.
-                Thus, the quote amount of ETH you get for providing 1 USDT is currently: 0.0005387 ETH.
-                However, we want the price to be ETH/USDT = 1856.32 USDT.
-                To get this value, we take the inverse of price.
-                1 / 0.0005387 = 1856.32
-                """
-                price = price * (1 / _p)
-                fee = fee * (1 - _f)
 
-            price_arr[i] = price
-            fee_arr[i] = 1 - fee
+            # There is always a first pool, so check the first pool's chain id
+            if path[0][0] == chain_idx:
+                price = 1
+                fee = 1
+                for p_step in np.arange(path.shape[0]):
+                    idx = path[p_step]
+                    if np.sum(idx) == 0:
+                        break
+                    _p, _f = self.get_price(*idx)
+                    """
+                    Take the inverse of price.
+                    This is needed because if you are trying to BUY ETH with USDT,
+                    then token_in will be USDT, and token_out will be ETH.
+                    Thus, the quote amount of ETH you get for providing 1 USDT is currently: 0.0005387 ETH.
+                    However, we want the price to be ETH/USDT = 1856.32 USDT.
+                    To get this value, we take the inverse of price.
+                    1 / 0.0005387 = 1856.32
+                    """
+                    price = price * (1 / _p)
+                    fee = fee * (1 - _f)
+
+                # The below operations directly write to memory
+                # So changes made here will persist
+                price_arr[i] = price
+                fee_arr[i] = 1 - fee
 
     def update_reserves(self,
                         chain: str,
