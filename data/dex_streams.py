@@ -105,7 +105,7 @@ class DexStream:
 
                     if self.debug:
                         dbg_msg = self.dex.debug_message(chain, exchange, token0, token1, 2)
-                        print(f'{dbg_msg} -> Update took: {e - s} seconds')
+                        print(f'{datetime.datetime.now()} {dbg_msg} -> Update took: {e - s} seconds')
 
     async def stream_uniswap_v3_events(self, chain: str):
         filtered_pools = [
@@ -160,7 +160,7 @@ class DexStream:
 
                     if self.debug:
                         dbg_msg = self.dex.debug_message(chain, exchange, token0, token1, 3)
-                        print(f'{dbg_msg} -> Update took: {e - s} seconds')
+                        print(f'{datetime.datetime.now()} {dbg_msg} -> Update took: {e - s} seconds')
 
 
 if __name__ == '__main__':

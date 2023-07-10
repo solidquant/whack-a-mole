@@ -11,7 +11,7 @@ async def reconnecting_websocket_loop(stream_fn: Callable):
         except (websockets.ConnectionClosedError, websockets.ConnectionClosedOK) as e:
             print(f'Websocket connection closed: {e}')
             print('Reconnecting...')
-            await asyncio.sleep(3)
+            await asyncio.sleep(1)
 
         except Exception as e:
             print(f'An error has occurred: {e}')
