@@ -7,10 +7,27 @@ import eth_utils
 import websockets
 import aioprocessing
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from data.dex import DEX
 from data.utils import reconnecting_websocket_loop
+
+
+def default_message_format(symbol: str, message: Dict[str, Any]) -> Dict[str, Any]:
+    """
+
+    :param symbol: BTC/USDT, ETH/USDT, ...
+    :param message: value of DEX.swap_paths[symbol]
+    ex) {'path': np.ndarray, 'tag': List[str], 'tokens': np.ndarray, 'price': np.ndarray, 'fee': np.ndarray}
+    :return:
+    """
+    return {
+        'source': 'dex',
+        'symbol': symbol,
+        'tag': message['tag'],
+        'price': message['price'].tolist(),
+        'fee': message['fee'].tolist(),
+    }
 
 
 class DexStream:
@@ -19,6 +36,7 @@ class DexStream:
                  dex: DEX,
                  ws_endpoints: Dict[str, str],
                  publisher: Optional[aioprocessing.AioQueue] = None,
+                 message_formatter: Callable = default_message_format,
                  debug: bool = False):
         """
         :param dex: DEX instance
@@ -32,6 +50,7 @@ class DexStream:
         self.dex = dex
         self.ws_endpoints = ws_endpoints
         self.publisher = publisher
+        self.message_formatter = message_formatter
         self.debug = debug
 
     def publish(self, data: Any):
@@ -103,15 +122,7 @@ class DexStream:
                     symbols = self.dex.get_symbols_to_update(token0, token1)
                     for symbol in symbols:
                         self.dex.update_price_for_symbol(chain, symbol)
-
-                    self.publish({
-                        'source': 'dex',
-                        'symbol': symbol,
-                        # 'path': self.dex.swap_paths[symbol]['path'].tolist(),
-                        'tag': self.dex.swap_paths[symbol]['tag'],
-                        'price': self.dex.swap_paths[symbol]['price'].tolist(),
-                        'fee': self.dex.swap_paths[symbol]['fee'].tolist(),
-                    })
+                        self.publish(self.message_formatter(symbol, self.dex.swap_paths[symbol]))
                     e = time.time()
 
                     if self.debug:
@@ -167,15 +178,7 @@ class DexStream:
                     symbols = self.dex.get_symbols_to_update(token0, token1)
                     for symbol in symbols:
                         self.dex.update_price_for_symbol(chain, symbol)
-
-                    self.publish({
-                        'source': 'dex',
-                        'symbol': symbol,
-                        # 'path': self.dex.swap_paths[symbol]['path'].tolist(),
-                        'tag': self.dex.swap_paths[symbol]['tag'],
-                        'price': self.dex.swap_paths[symbol]['price'].tolist(),
-                        'fee': self.dex.swap_paths[symbol]['fee'].tolist(),
-                    })
+                        self.publish(self.message_formatter(symbol, self.dex.swap_paths[symbol]))
                     e = time.time()
 
                     if self.debug:
@@ -199,5 +202,5 @@ if __name__ == '__main__':
 
     queue = aioprocessing.AioQueue()
 
-    dex_stream = DexStream(dex, WS_ENDPOINTS, queue, False)
+    dex_stream = DexStream(dex, WS_ENDPOINTS, queue, default_message_format, False)
     dex_stream.start_streams()
