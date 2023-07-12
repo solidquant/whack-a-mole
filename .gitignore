@@ -27,3 +27,6 @@ contracts/out/
 
 # Docs
 docs/
+
+# Test scripts
+scripts/

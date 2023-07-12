@@ -26,8 +26,8 @@ WS_ENDPOINTS = {
 }
 
 TRADING_SYMBOLS = [
-    # 'BTC/USDT',
-    'ETH/USDT',
+    'BTC/USDT',
+    # 'ETH/USDT',
     # 'USDC/USDT',
     # 'MATIC/USDT',
 ]

@@ -1,16 +1,25 @@
+import os
 import json
 import time
 import eth_abi
 import asyncio
+import aiohttp
+import requests
 import datetime
 import eth_utils
 import websockets
 import aioprocessing
+from web3 import Web3
 from functools import partial
+from dotenv import load_dotenv
 from typing import Any, Callable, Dict, Optional
 
 from data.dex import DEX
-from data.utils import reconnecting_websocket_loop
+from data.utils import reconnecting_websocket_loop, calculate_next_block_base_fee
+
+load_dotenv(override=True)
+
+BLOCKNATIVE_API_KEY = os.getenv('BLOCKNATIVE_API_KEY')
 
 
 def default_message_format(symbol: str, message: Dict[str, Any]) -> Dict[str, Any]:
@@ -18,11 +27,18 @@ def default_message_format(symbol: str, message: Dict[str, Any]) -> Dict[str, An
 
     :param symbol: BTC/USDT, ETH/USDT, ...
     :param message: value of DEX.swap_paths[symbol]
-    ex) {'path': np.ndarray, 'tag': List[str], 'tokens': np.ndarray, 'price': np.ndarray, 'fee': np.ndarray}
+    ex) {'path': np.ndarray,
+         'pool_indexes': List[List[int]],
+         'tag': List[str],
+         'tokens': np.ndarray,
+         'price': np.ndarray,
+         'fee': np.ndarray}
     :return:
     """
     return {
         'source': 'dex',
+        'path': message['path'].tolist(),
+        'pool_indexes': message['pool_indexes'],
         'symbol': symbol,
         'tag': message['tag'],
         'price': message['price'].tolist(),
@@ -46,6 +62,9 @@ class DexStream:
 
         :param publisher: an instance of aioprocessing.AioQueue, used to send processed
                           market data to strategy
+
+        :param message_formatter: is used to format message sent through the publisher
+                                  this data will be accessed from the main process
         """
         self.dex = dex
         self.ws_endpoints = ws_endpoints
@@ -185,6 +204,49 @@ class DexStream:
                         dbg_msg = self.dex.debug_message(chain, exchange, token0, token1, 3)
                         print(f'{datetime.datetime.now()} {dbg_msg} -> Update took: {e - s} seconds')
 
+    async def stream_new_blocks(self, chain: str):
+        """
+        Retrieves new blocks and calculates base fees accordingly
+        Base fees are calculated adhering to the EIP-1559 implementation and
+        max_price, max_priority_fee_per_gas, max_fee_per_gas are retrieved using Blocknative's gas estimator endpoint
+
+        - Ethereum: https://api.blocknative.com/gasprices/blockprices?chainId=1
+        - Polygon: https://api.blocknative.com/gasprices/blockprices?chainId=137
+        """
+        w3 = Web3(Web3.AsyncHTTPProvider(self.dex.rpc_endpoints[chain]))
+
+        async with websockets.connect(self.ws_endpoints[chain]) as ws:
+            subscription = {
+                'json': '2.0',
+                'id': 1,
+                'method': 'eth_subscribe',
+                'params': ['newHeads']
+            }
+
+            await ws.send(json.dumps(subscription))
+            _ = await ws.recv()
+
+            while True:
+                msg = await asyncio.wait_for(ws.recv(), timeout=60 * 10)
+                block = json.loads(msg)['params']['result']
+                base_fee = calculate_next_block_base_fee(block)
+                print(base_fee / 10 ** 9)
+
+                """
+                For Ethereum and Polygon, use gas price estimation tools provided by Blocknative
+                """
+                if chain in ['ethereum', 'polygon'] and BLOCKNATIVE_API_KEY:
+                    chain_id = 1 if 'ethereum' else 137
+                    headers = {'Authorization': BLOCKNATIVE_API_KEY}
+                    async with aiohttp.ClientSession(headers=headers) as session:
+                        async with session.get(f'https://api.blocknative.com/gasprices/blockprices?chainId={chain_id}') as r:
+                            res = await r.json()
+                            estimated_price = res['blockPrices'][0]['estimatedPrices'][0]
+
+                            max_price = res['maxPrice']
+                            max_priority_fee_per_gas = estimated_price['maxPriorityFeePerGas']
+                            max_fee_per_gas = estimated_price['maxFeePerGas']
+
 
 if __name__ == '__main__':
     from configs import (
@@ -203,4 +265,6 @@ if __name__ == '__main__':
     queue = aioprocessing.AioQueue()
 
     dex_stream = DexStream(dex, WS_ENDPOINTS, queue, default_message_format, False)
-    dex_stream.start_streams()
+    # dex_stream.start_streams()
+
+    asyncio.run(dex_stream.stream_new_blocks('ethereum'))
