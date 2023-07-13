@@ -3,6 +3,8 @@ from web3 import Web3
 from typing import Any, Dict, List
 from multicall import Call, Multicall
 
+from simulation import UniswapV2Simulator, UniswapV3Simulator
+
 # Dimension of DEX.storage_array
 CHAIN = 0
 EXCHANGE = 1
@@ -20,7 +22,7 @@ RESERVE0 = 2
 RESERVE1 = 3
 SQRT_PRICE = 4
 FEE = 5
-TOKEN_IN_IS_TOKEN0 = 6
+TOKEN0_IN = 6
 POOL_INDEX = 7
 
 
@@ -60,6 +62,9 @@ class DexBase:
         self.pools = pools
         self.trading_symbols = trading_symbols
         self.max_swap_number = max_swap_number
+
+        self.sim_v2 = UniswapV2Simulator()
+        self.sim_v3 = UniswapV3Simulator()
 
         self.web3 = {k: Web3(Web3.HTTPProvider(v)) for k, v in rpc_endpoints.items()}
 
@@ -454,9 +459,9 @@ class DEX(DexBase):
         dec0, dec1, res0, res1, sqrt, fee, tok0, _ = self.storage_array[idx]
 
         if v == V2:
-            price = reserves_to_price(res0, res1, dec0, dec1, tok0)
+            price = self.sim_v2.reserves_to_price(res0, res1, dec0, dec1, bool(tok0))
         else:
-            price = sqrt_to_price(sqrt, dec0, dec1, tok0)
+            price = self.sim_v3.sqrtx96_to_price(sqrt, dec0, dec1, bool(tok0))
 
         return price, fee
 
@@ -555,35 +560,6 @@ class DEX(DexBase):
         idx = self.get_index(chain, exchange, token0, token1, version)
         price, _ = self.get_price(*idx)
         return f'[{chain}] {exchange} V{version}: {token0}/{token1} @{price} & {token1}/{token0} @{1 / price}'
-
-
-# Uniswap math utility functions
-
-def sqrt_to_price(sqrt: float,
-                  decimals0: float,
-                  decimals1: float,
-                  token_in_is_token0: int) -> float:
-    """
-    Uniswap V3 variant calculation of price
-    """
-    numerator = sqrt ** 2
-    denominator = 2 ** 192
-    ratio = numerator / denominator
-    shift_decimals = 10 ** (decimals0 - decimals1)
-    ratio *= shift_decimals
-    return ratio if token_in_is_token0 == 1 else 1 / ratio
-
-
-def reserves_to_price(reserve0: float,
-                      reserve1: float,
-                      decimals0: float,
-                      decimals1: float,
-                      token_in_is_token0: int) -> float:
-    """
-    Uniswap V2 variant calculation of price
-    """
-    ratio = reserve1 / reserve0 * 10 ** (decimals0 - decimals1)
-    return ratio if token_in_is_token0 == 1 else 1 / ratio
 
 
 if __name__ == '__main__':
