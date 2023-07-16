@@ -5,14 +5,16 @@ import "openzeppelin-contracts/contracts/utils/math/SafeMath.sol";
 
 import "./protocols/uniswap/UniswapV2Library.sol";
 import "./protocols/uniswap/IQuoterV2.sol";
+import "./protocols/curve/ICurvePool.sol";
 
+// Deployment gas: 610,194
+// With optimizations: 773,502
 contract SimulatorV1 {
     using SafeMath for uint256;
 
     struct SwapParams {
         uint8 protocol; // 0 (UniswapV2), 1 (UniswapV3), 2 (Curve Finance)
-        address factoryQuoter;
-        address pool; // used in Curve Finance
+        address handler; // UniswapV2: Factory, UniswapV3: Quoter, Curve: Pool
         address tokenIn;
         address tokenOut;
         uint24 fee; // only used in Uniswap V3
@@ -22,11 +24,12 @@ contract SimulatorV1 {
     constructor() {}
 
     function simulateSwapIn(
-        SwapParams[] memory paramsArray
+        SwapParams[] calldata paramsArray
     ) public returns (uint256) {
-        uint256 amountOut = 0;
+        uint256 amountOut;
+        uint256 paramsArrayLength = paramsArray.length;
 
-        for (uint256 i; i < paramsArray.length - 1; ) {
+        for (uint256 i; i < paramsArrayLength; ) {
             SwapParams memory params = paramsArray[i];
 
             if (amountOut == 0) {
@@ -42,7 +45,7 @@ contract SimulatorV1 {
             }
 
             unchecked {
-                i++;
+                ++i;
             }
         }
 
@@ -53,7 +56,7 @@ contract SimulatorV1 {
         SwapParams memory params
     ) public view returns (uint256 amountOut) {
         (uint reserveIn, uint reserveOut) = UniswapV2Library.getReserves(
-            params.factoryQuoter,
+            params.handler,
             params.tokenIn,
             params.tokenOut
         );
@@ -67,7 +70,7 @@ contract SimulatorV1 {
     function simulateUniswapV3SwapIn(
         SwapParams memory params
     ) public returns (uint256 amountOut) {
-        IQuoterV2 quoter = IQuoterV2(params.factoryQuoter);
+        IQuoterV2 quoter = IQuoterV2(params.handler);
         IQuoterV2.QuoteExactInputSingleParams memory quoterParams;
         quoterParams.tokenIn = params.tokenIn;
         quoterParams.tokenOut = params.tokenOut;
@@ -75,5 +78,36 @@ contract SimulatorV1 {
         quoterParams.fee = params.fee;
         quoterParams.sqrtPriceLimitX96 = 0;
         (amountOut, , , ) = quoter.quoteExactInputSingle(quoterParams);
+    }
+
+    function simulateCurveSwapIn(
+        SwapParams memory params
+    ) public returns (uint256 amountOut) {
+        ICurvePool pool = ICurvePool(params.handler);
+
+        int128 i;
+        int128 j;
+
+        int128 coinIdx;
+
+        while (i == j) {
+            address coin = pool.coins(coinIdx);
+
+            if (coin == params.tokenIn) {
+                i = coinIdx;
+            } else if (coin == params.tokenOut) {
+                j = coinIdx;
+            }
+
+            if (i != j) {
+                break;
+            }
+
+            unchecked {
+                ++coinIdx;
+            }
+        }
+
+        amountOut = pool.get_dy(i, j, params.amount);
     }
 }

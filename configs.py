@@ -32,6 +32,20 @@ TRADING_SYMBOLS = [
     # 'MATIC/USDT',
 ]
 
+"""
+Used to optimize order amount from V2
+The current version, V1, will not support optimized order sizes,
+and will instead trade fixed order sizes for simplicity
+"""
+# MAX_AMOUNT_IN, STEP_SIZE
+TRADING_CONSTRAINTS = {
+    'BTC': [10, 0.01],
+    'ETH': [100, 0.1],
+    'USDC': [100000, 0.1],
+    'USDT': [100000, 0.1],
+    'MATIC': [100000, 0.1]
+}
+
 TOKENS = {
     'ethereum': ETHEREUM_TOKENS,
     'polygon': POLYGON_TOKENS,

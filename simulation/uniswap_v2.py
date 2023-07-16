@@ -1,7 +1,3 @@
-import numpy as np
-from typing import Union
-
-
 class UniswapV2Simulator:
 
     def __init__(self):
@@ -41,10 +37,10 @@ class UniswapV2Simulator:
         amount_in_with_fee = amount_in * (1000 - fee)
         numerator = amount_in_with_fee * reserve_out
         denominator = (reserve_in * 1000) + amount_in_with_fee
-        return numerator / denominator
+        return int(numerator / denominator)
 
     def get_amount_in(self,
-                      amount_out: Union[np.ndarray, float],
+                      amount_out: float,
                       reserve_in: float,
                       reserve_out: float,
                       fee: float = 3000):
@@ -52,7 +48,7 @@ class UniswapV2Simulator:
         fee = fee // 1000
         numerator = reserve_in * amount_out * 1000
         denominator = (reserve_out - amount_out) * (1000 - fee)
-        return numerator / denominator + 1
+        return int(numerator / denominator + 1)
 
     def get_max_amount_in(self,
                           reserve0: float,
@@ -78,10 +74,12 @@ class UniswapV2Simulator:
         To reduce the search space, we pre-set values such as: max_amount_in, step_size,
                                                                slippage_tolerance_lower/upper
 
-        Setting slippage_tolerance_lower: 0, slippage_tolerance_upper: 0.001
-        will find the amount_in with a slippage below 0.1%
+        * Slippage tips:
 
-        However, if you want to fine tune your amount_in, you should set the tolerance level like:
+        1. Setting slippage_tolerance_lower: 0, slippage_tolerance_upper: 0.001
+        will find the amount_in with a slippage below 0.1% --> this method is faster
+
+        2. However, if you want to fine tune your amount_in, you should set the tolerance level like:
         slippage_tolerance_lower: 0.0009, slippage_tolerance_upper: 0.001
 
         :param max_amount_in: the max_amount_in used in binary search

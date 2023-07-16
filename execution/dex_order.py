@@ -21,6 +21,12 @@ GOERLI_WS_RPC_URL = os.getenv('GOERLI_WS_RPC_URL')
 CHAIN_ID = 5
 
 
+class DexOrder:
+
+    def __init__(self):
+        pass
+
+
 def explore_block():
     w3 = Web3(HTTPProvider(ETHEREUM_HTTP_RPC_URL))
     block = w3.eth.get_block(17667201)

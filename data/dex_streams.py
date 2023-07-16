@@ -4,12 +4,11 @@ import time
 import eth_abi
 import asyncio
 import aiohttp
-import requests
 import datetime
 import eth_utils
 import websockets
+import numpy as np
 import aioprocessing
-from web3 import Web3
 from functools import partial
 from dotenv import load_dotenv
 from typing import Any, Callable, Dict, Optional
@@ -19,10 +18,12 @@ from data.utils import reconnecting_websocket_loop, calculate_next_block_base_fe
 
 load_dotenv(override=True)
 
-BLOCKNATIVE_API_KEY = os.getenv('BLOCKNATIVE_API_KEY')
+BLOCKNATIVE_TOKEN = os.getenv('BLOCKNATIVE_TOKEN')
 
 
-def default_message_format(symbol: str, message: Dict[str, Any]) -> Dict[str, Any]:
+def default_message_format(symbol: str,
+                           message: Dict[str, Any],
+                           block_number: int = 0) -> Dict[str, Any]:
     """
 
     :param symbol: BTC/USDT, ETH/USDT, ...
@@ -33,10 +34,13 @@ def default_message_format(symbol: str, message: Dict[str, Any]) -> Dict[str, An
          'tokens': np.ndarray,
          'price': np.ndarray,
          'fee': np.ndarray}
+    :param block_number: block number of event
     :return:
     """
     return {
         'source': 'dex',
+        'type': 'event',
+        'block': block_number,
         'path': message['path'].tolist(),
         'pool_indexes': message['pool_indexes'],
         'symbol': symbol,
@@ -78,6 +82,9 @@ class DexStream:
 
     def start_streams(self):
         streams = []
+
+        for chain in self.dex.chains_list:
+            streams.append(asyncio.ensure_future(self.stream_new_blocks(chain)))
 
         for chain in self.dex.chains_list:
             v2_stream = reconnecting_websocket_loop(
@@ -125,6 +132,7 @@ class DexStream:
 
                 if address in pools:
                     s = time.time()
+                    block_number = int(event['blockNumber'], base=16)
                     pool = pools[address]
                     data = eth_abi.decode_abi(
                         ['uint112', 'uint112'],
@@ -141,7 +149,7 @@ class DexStream:
                     symbols = self.dex.get_symbols_to_update(token0, token1)
                     for symbol in symbols:
                         self.dex.update_price_for_symbol(chain, symbol)
-                        self.publish(self.message_formatter(symbol, self.dex.swap_paths[symbol]))
+                        self.publish(self.message_formatter(symbol, self.dex.swap_paths[symbol], block_number))
                     e = time.time()
 
                     if self.debug:
@@ -181,6 +189,7 @@ class DexStream:
                 if address in pools:
                     # we don't need the sender, recipient data in topics
                     s = time.time()
+                    block_number = int(event['blockNumber'], base=16)
                     pool = pools[address]
                     data = eth_abi.decode_abi(
                         ['int256', 'int256', 'uint160', 'uint128', 'int24'],
@@ -197,7 +206,7 @@ class DexStream:
                     symbols = self.dex.get_symbols_to_update(token0, token1)
                     for symbol in symbols:
                         self.dex.update_price_for_symbol(chain, symbol)
-                        self.publish(self.message_formatter(symbol, self.dex.swap_paths[symbol]))
+                        self.publish(self.message_formatter(symbol, self.dex.swap_paths[symbol], block_number))
                     e = time.time()
 
                     if self.debug:
@@ -213,7 +222,19 @@ class DexStream:
         - Ethereum: https://api.blocknative.com/gasprices/blockprices?chainId=1
         - Polygon: https://api.blocknative.com/gasprices/blockprices?chainId=137
         """
-        w3 = Web3(Web3.AsyncHTTPProvider(self.dex.rpc_endpoints[chain]))
+
+        """
+        historical_gas tracks 100 historical base_fee, max_priority_fee_per_gas, max_fee_per_gas
+        However, note that the historical data isn't loaded up from the start, but instead is
+        filled in at real-time
+        Thus, at start-up this data is an empty numpy array with all 0's
+        """
+        historical_gas = np.zeros((3, 100))
+
+        # index of historical_gas
+        BASE_FEE = 0
+        MAX_PRIORITY_FEE_PER_GAS = 1
+        MAX_FEE_PER_GAS = 2
 
         async with websockets.connect(self.ws_endpoints[chain]) as ws:
             subscription = {
@@ -226,26 +247,57 @@ class DexStream:
             await ws.send(json.dumps(subscription))
             _ = await ws.recv()
 
+            gwei = 10 ** 9
+
             while True:
                 msg = await asyncio.wait_for(ws.recv(), timeout=60 * 10)
                 block = json.loads(msg)['params']['result']
+                block_number = int(block['number'], base=16)
                 base_fee = calculate_next_block_base_fee(block)
-                print(base_fee / 10 ** 9)
 
                 """
                 For Ethereum and Polygon, use gas price estimation tools provided by Blocknative
+                https://www.blocknative.com/gas-estimator
+                
+                Run only if a token is given
                 """
-                if chain in ['ethereum', 'polygon'] and BLOCKNATIVE_API_KEY:
+                if chain in ['ethereum', 'polygon'] and BLOCKNATIVE_TOKEN:
                     chain_id = 1 if 'ethereum' else 137
-                    headers = {'Authorization': BLOCKNATIVE_API_KEY}
+                    headers = {'Authorization': BLOCKNATIVE_TOKEN}
                     async with aiohttp.ClientSession(headers=headers) as session:
                         async with session.get(f'https://api.blocknative.com/gasprices/blockprices?chainId={chain_id}') as r:
                             res = await r.json()
                             estimated_price = res['blockPrices'][0]['estimatedPrices'][0]
 
-                            max_price = res['maxPrice']
                             max_priority_fee_per_gas = estimated_price['maxPriorityFeePerGas']
                             max_fee_per_gas = estimated_price['maxFeePerGas']
+
+                            new_gas_data = [
+                                base_fee,
+                                int(max_priority_fee_per_gas * gwei),
+                                int(max_fee_per_gas * gwei)
+                            ]
+                else:
+                    new_gas_data = [base_fee, 0, 0]
+
+                """
+                update historical_gas data as you would an Deque data structure
+                
+                Currently this data does nothing, however, it can be used to optimize gas costs later
+                """
+                historical_gas[:, 0:-1] = historical_gas[:, 1:]
+                historical_gas[:, -1] = new_gas_data
+
+                data = {
+                    'source': 'dex',
+                    'type': 'block',
+                    'chain': chain,
+                    'block': block_number,
+                    'base_fee': int(historical_gas[BASE_FEE, -1]),
+                    'max_priority_fee_per_gas': int(historical_gas[MAX_PRIORITY_FEE_PER_GAS, -1]),
+                    'max_fee_per_gas': int(historical_gas[MAX_FEE_PER_GAS, -1]),
+                }
+                self.publish(data)
 
 
 if __name__ == '__main__':
@@ -257,14 +309,19 @@ if __name__ == '__main__':
         TRADING_SYMBOLS,
     )
 
-    dex = DEX(RPC_ENDPOINTS,
-              TOKENS,
-              POOLS,
+    chain = 'ethereum'
+
+    rpc_endpoints = {chain: RPC_ENDPOINTS[chain]}
+    ws_endpoints = {chain: WS_ENDPOINTS[chain]}
+    tokens = {chain: TOKENS[chain]}
+    pools = [pool for pool in POOLS if pool['chain'] == chain]
+
+    dex = DEX(rpc_endpoints,
+              tokens,
+              pools,
               TRADING_SYMBOLS)
 
     queue = aioprocessing.AioQueue()
 
-    dex_stream = DexStream(dex, WS_ENDPOINTS, queue, default_message_format, False)
-    # dex_stream.start_streams()
-
-    asyncio.run(dex_stream.stream_new_blocks('ethereum'))
+    dex_stream = DexStream(dex, ws_endpoints, queue, default_message_format, False)
+    dex_stream.start_streams()

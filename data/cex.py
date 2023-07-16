@@ -3,6 +3,12 @@ from typing import List
 
 
 class CEX:
+    """
+    Use CCXT to build CEX execution
+
+    The Python project is a prototype CEX-DEX arb. bot,
+    use as much of what others have built already
+    """
 
     def __init__(self, trading_symbols: List[str]):
         self.trading_symbols = trading_symbols

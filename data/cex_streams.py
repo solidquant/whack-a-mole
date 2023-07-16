@@ -14,6 +14,15 @@ from data.utils import reconnecting_websocket_loop
 
 
 class CexStream:
+    """
+    WIP
+
+    The first step to building CEX-DEX arbitrage bot is making sure DEX execution works well
+    Data from CEX and DEX are updated at different time frames, as CEX data is real-time,
+    whereas DEX data is updated every new block.
+
+    Analyze how this will affect execution of CEX-DEX arbitrage
+    """
 
     def __init__(self,
                  cex: CEX,
