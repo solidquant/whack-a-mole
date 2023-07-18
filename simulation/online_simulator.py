@@ -1,9 +1,8 @@
+import os
 import json
 from web3 import Web3
+from pathlib import Path
 from typing import Any, Dict, List
-
-V2 = 0
-V3 = 1
 
 PROTOCOL_TO_ID = {
     'uniswap_v2': 0,
@@ -12,7 +11,9 @@ PROTOCOL_TO_ID = {
     'sushiswap_v3': 1,
 }
 
-SIMULATOR_ABI = json.load(open('./SimulatorV1.json', 'r'))['abi']
+DIR = os.path.dirname(os.path.abspath(__file__))
+ABI_FILE_PATH = Path(DIR) / 'SimulatorV1.json'
+SIMULATOR_ABI = json.load(open(ABI_FILE_PATH, 'r'))['abi']
 
 
 class OnlineSimulator:
@@ -149,14 +150,12 @@ class OnlineSimulator:
 
         return list(reversed(params_list))
 
-    def simulate(self, params: List[Dict[str, Any]]) -> int:
-        chain = self.chains_list[buy_path[0][0]]
+    def simulate(self, chain: str, params: List[Dict[str, Any]]) -> int:
         return self.sim[chain].functions.simulateSwapIn(params).call()
 
 
 if __name__ == '__main__':
     import os
-    import asyncio
     from dotenv import load_dotenv
 
     from configs import RPC_ENDPOINTS
@@ -183,17 +182,28 @@ if __name__ == '__main__':
 
     Buy, sell should work like CEXs
     """
-    amount_in = 1000 * 10 ** 6
+    amount_in = 100 * 10 ** 6
 
-    buy_path = [[0, 0, 5, 2, 1], [0, 0, 0, 0, 0]]
-    sell_path = [[0, 1, 5, 2, 1], [0, 0, 0, 0, 0]]
+    buy_path = [[0, 1, 5, 4, 1], [0, 0, 4, 2, 1]]
+    sell_path = [[0, 0, 5, 2, 1], [0, 0, 0, 0, 0]]
 
-    buy_pools = [9]
-    sell_pools = [0]
+    buy_pools = [1, 10]
+    sell_pools = [9]
 
     params = sim.make_params(amount_in, buy_path, sell_path, buy_pools, sell_pools)
-    simulated_amount_out = sim.simulate(params)
-    print(simulated_amount_out)
+
+    for param in params:
+        print(param)
+    """
+    Output:
+    
+    {'protocol': 1, 'handler': '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', 'tokenIn': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'tokenOut': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'fee': 100, 'amount': 100000000}
+    {'protocol': 1, 'handler': '0x64e8802FE490fa7cc61d3463958199161Bb608A7', 'tokenIn': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'tokenOut': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'fee': 500, 'amount': 0}
+    {'protocol': 1, 'handler': '0x64e8802FE490fa7cc61d3463958199161Bb608A7', 'tokenIn': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'tokenOut': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'fee': 500, 'amount': 0}
+    """
+
+    simulated_amount_out = sim.simulate(chain, params)
+    print(f'Simulated amount out: {simulated_amount_out / 10 ** 6} USDT')
 
     simulated_profit_in_usdt = (simulated_amount_out - amount_in) / 10 ** 6
-    print(simulated_profit_in_usdt)
+    print(f'Simulated profit: {simulated_profit_in_usdt} USDT')

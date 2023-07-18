@@ -17,6 +17,24 @@ load_dotenv(override=True)
 ETHEREUM_SIMULATOR_ADDRESS = os.getenv('ETHEREUM_SIMULATOR_ADDRESS')
 
 
+class Pending:
+
+    def __init__(self):
+        self.info = None
+
+    def can_add(self):
+        return self.info is None
+
+    def get_pending(self):
+        return self.info
+
+    def add_pending(self, pending: Dict[str, Any]):
+        self.info = pending
+
+    def delete_pending(self):
+        self.info = None
+
+
 def cycle_name(pools_1: List[int],
                pools_2: List[int],
                pools: List[Dict[str, Any]]) -> str:
@@ -124,7 +142,7 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
     gas_info = {}
 
     spreads = {}
-    pending = None
+    pending = Pending()
 
     """
     The cost of WhackAMoleBotV1 swaps
@@ -138,24 +156,23 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
         3: 50000,   # V3 1-hop cost
     }
 
-    async def _process_pending_order():
-        global pending
-
+    async def _process_pending_order(pending: Pending):
         """
         1. Simulate using SimulatorV1
         2. Execute order using Flashbots
         """
-        if not pending:
+        if pending.can_add():
             return
 
-        if 'block' not in gas_info and pending['block'] != gas_info['block']:
-            pending = None
+        pending_info = pending.get_pending()
+
+        if 'block' not in gas_info or pending_info['block'] != gas_info['block']:
             return
 
-        spread = spreads[pending['key']]
+        spread = spreads[pending_info['key']]
 
         if spread <= 0:
-            pending = None
+            pending.delete_pending()
             return
 
         """
@@ -167,10 +184,10 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
         which is higher than that of buy_price.
         This is another mechanism to overestimate the cost for a more realistic simulation result.
         """
-        buy_price = pending['max_buy_sell_price'][0]
-        sell_price = pending['max_buy_sell_price'][1]
+        buy_price = pending_info['max_buy_sell_price'][0]
+        sell_price = pending_info['max_buy_sell_price'][1]
 
-        gas_cost = (pending['estimated_gas_used'] * gas_info['max_fee_per_gas']) * 10 ** (-18)
+        gas_cost = (pending_info['estimated_gas_used'] * gas_info['max_fee_per_gas']) * 10 ** (-18)  # in ETH
         gas_cost_in_usdt = gas_cost * sell_price  # the sell_price has to be price of ETH/USDT
 
         usdt_profit_per_unit_of_token = buy_price * (spread / 100.0)
@@ -189,27 +206,26 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
             usdt_decimals = simulator.tokens[chain]['USDT'][1]
             min_amount_in = max_bet_size * 10 ** usdt_decimals
             params = simulator.make_params(amount_in=min_amount_in_usdt,
-                                           buy_path=pending['buy_path'],
-                                           sell_path=pending['sell_path'],
-                                           buy_pools=pending['buy_pools'],
-                                           sell_pools=pending['sell_pools'])
+                                           buy_path=pending_info['buy_path'],
+                                           sell_path=pending_info['sell_path'],
+                                           buy_pools=pending_info['buy_pools'],
+                                           sell_pools=pending_info['sell_pools'])
             s = time.time()
-            simulated_amount_out = simulator.simulate(params)
+            simulated_amount_out = simulator.simulate(chain, params)
             e = time.time()
             simulation_took = e - s
             simulated_profit_in_usdt = (simulated_amount_out - min_amount_in) / 10 ** usdt_decimals
 
             final_profit = simulated_profit_in_usdt - gas_cost_in_usdt
+            print(f'Simulated profit in USDT: {final_profit} (Took: {round(simulation_took, 3)} secs)')
 
             if final_profit > 0:
                 # TODO: execute order here
-                await telegram.send(f'Block #{pending["block"]} {pending["key"]}: +{final_profit} USDT')
+                await telegram.send(f'Block #{pending_info["block"]} {pending_info["key"]}: +{final_profit} USDT')
             else:
-                print(f'Simulated profit in USDT: {final_profit} (Took: {simulation_took} secs)')
+                pending.delete_pending()
         else:
-            print('Min amount in USDT: ', min_amount_in_usdt)
-            pending = None
-
+            pending.delete_pending()
 
     while True:
         try:
@@ -225,7 +241,7 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
                 gas_info = data
                 print('[New block] ', gas_info)
 
-                await _process_pending_order()
+                await _process_pending_order(pending)
 
             elif data_type == 'event':
                 s = time.time()
@@ -293,7 +309,7 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
 
                 # add newly detected edge (positive spread) to pending
                 # we process one edge a time to make our lives easier
-                if not pending and max_spread > 0:
+                if pending.can_add() and max_spread > 0:
                     # before we add the new max_spread_key, first check if the spread can cover
                     # gas costs with our max_bet_size
                     buy_path = data['path'][max_path_index[1]]
@@ -316,7 +332,7 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
                     We send a REST API call to Blocknative for gas info, so we need to wait for the response
                     to arrive before we run our simulation.
                     """
-                    pending = {
+                    pending_info = {
                         'key': max_spread_key,
                         'max_buy_sell_price': max_buy_sell_price,
                         'block': data['block'],          # block at which the edge was detected
@@ -327,9 +343,9 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
                         'sell_pools': data['pool_indexes'][max_path_index[0]],
                         'estimated_gas_used': estimated_gas_used,
                     }
-                    print('+ ADDED NEW PENDING: ', pending)
+                    pending.add_pending(pending_info)
 
-                await _process_pending_order()
+                await _process_pending_order(pending)
 
         except Exception as e:
             await influxdb.close()
