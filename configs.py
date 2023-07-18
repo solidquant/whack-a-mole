@@ -9,6 +9,8 @@ from addresses import (
     ETHEREUM_POOLS,
     POLYGON_POOLS,
     ARBITRUM_POOLS,
+
+    ETHEREUM_SIMULATION_HANDLERS,
 )
 
 load_dotenv(override=True)
@@ -53,5 +55,9 @@ TOKENS = {
 }
 
 POOLS = ETHEREUM_POOLS + POLYGON_POOLS + ARBITRUM_POOLS
+
+SIMULATION_HANDLERS = {
+    'ethereum': ETHEREUM_SIMULATION_HANDLERS,
+}
 
 CEX_LIST = ['binance', 'okx', 'bybit']

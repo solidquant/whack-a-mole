@@ -84,7 +84,11 @@ class DexStream:
         streams = []
 
         for chain in self.dex.chains_list:
-            streams.append(asyncio.ensure_future(self.stream_new_blocks(chain)))
+            block_stream = reconnecting_websocket_loop(
+                partial(self.stream_new_blocks, chain),
+                tag=f'{chain.upper()}_Blocks'
+            )
+            streams.append(block_stream)
 
         for chain in self.dex.chains_list:
             v2_stream = reconnecting_websocket_loop(
@@ -324,4 +328,5 @@ if __name__ == '__main__':
     queue = aioprocessing.AioQueue()
 
     dex_stream = DexStream(dex, ws_endpoints, queue, default_message_format, False)
-    dex_stream.start_streams()
+    # dex_stream.start_streams()
+    asyncio.run(dex_stream.stream_new_blocks('ethereum'))

@@ -123,7 +123,7 @@ contract WhackAMoleBotV1 {
         return amountOut;
     }
 
-    // Gas: 115,992
+    // Gas: 133,140
     function uniswapV2Swap(
         SwapParams memory params
     ) internal returns (uint256 amountOut) {

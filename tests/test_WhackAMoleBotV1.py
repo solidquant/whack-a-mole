@@ -50,8 +50,8 @@ class WhackAMoleBotV1Tests(TestCase):
     SWAP_ROUTER = '0xE592427A0AEce92De3Edee1F18E0157C05861564'
 
     # WhackAMoleBotV1
-    BOT = '0x46d4674578a2daBbD0CEAB0500c6c7867999db34'
-    SIMULATOR = '0x9155497EAE31D432C0b13dBCc0615a37f55a2c87'
+    BOT = '0x9155497EAE31D432C0b13dBCc0615a37f55a2c87'
+    SIMULATOR = '0xfB12F7170FF298CDed84C793dAb9aBBEcc01E798'
 
     def setUp(self):
         self.signer = Account.from_key(self.TEST_PRIVATE_KEY)
@@ -291,3 +291,104 @@ class WhackAMoleBotV1Tests(TestCase):
 
         weth_amount_out = weth_balance_after - (weth_balance_before - self.web3.to_wei(1, 'ether'))
         self.assertEqual(simulated_amount_out, weth_amount_out)
+
+    def test_n_hop_swap_gas(self):
+        """
+        V2 1-hop: 116040
+           2-hop: 145834
+           3-hop: 182965
+           4-hop: 208761
+
+        V3 1-hop: 117267
+           2-hop: 161362
+           3-hop: 207317
+           4-hop: 242614
+
+        V2 1-hop / V3 1-hop: 186354
+        V2 2-hop / V3 1-hop: 220666
+        V2 1-hop / V3 2-hop: 235437
+        V2 2-hop / V3 2-hop: 262089
+
+        For simplicity:
+        Base cost: 100000
+        V2 1-hop costs: 40000
+        V3 1-hop costs: 50000
+        """
+        params_1 = {
+            'protocol': 0,
+            'handler': self.ROUTER2,
+            'tokenIn': self.WETH,
+            'tokenOut': self.USDT,
+            'fee': 3000,
+            'amount': self.web3.to_wei(0.1, 'ether'),
+        }
+        params_2 = {
+            'protocol': 1,
+            'handler': self.SWAP_ROUTER,
+            'tokenIn': self.USDT,
+            'tokenOut': self.WETH,
+            'fee': 500,
+            'amount': 0,
+        }
+        params_3 = {
+            'protocol': 1,
+            'handler': self.SWAP_ROUTER,
+            'tokenIn': self.WETH,
+            'tokenOut': self.USDT,
+            'fee': 500,
+            'amount': 0,
+        }
+        params_4 = {
+            'protocol': 0,
+            'handler': self.ROUTER2,
+            'tokenIn': self.USDT,
+            'tokenOut': self.WETH,
+            'fee': 3000,
+            'amount': 0,
+        }
+
+        nonce = self.web3.eth.get_transaction_count(self.signer.address)
+        transfer_transaction = self.bot.functions.whack(
+            [params_1, params_4, params_1, params_4], 0
+        ).build_transaction({
+            'from': self.signer.address,
+            'chainId': 1,
+            'nonce': nonce,
+            'gas': 300000,
+            'maxFeePerGas': self.web3.to_wei(100, 'gwei'),
+            'maxPriorityFeePerGas': self.web3.to_wei(50, 'gwei'),
+        })
+        signed = self.signer.sign_transaction(transfer_transaction)
+        tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
+        tx = self.web3.eth.get_transaction(tx_hash)
+        print(tx)
+
+    def test_price_impact_simulation(self):
+        uniswap_quoter2 = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e'
+        sushiswap_quoter2 = '0x64e8802FE490fa7cc61d3463958199161Bb608A7'
+
+        # Scenario 1: WETH -> USDT -> WETH
+        amount_in = 1 * 10 ** self.WETH_DECIMALS
+
+        params_1 = {
+            'protocol': 1,
+            'handler': uniswap_quoter2,
+            'tokenIn': self.WETH,
+            'tokenOut': self.USDT,
+            'fee': 500,
+            'amount': amount_in,
+        }
+        params_2 = {
+            'protocol': 1,
+            'handler': sushiswap_quoter2,
+            'tokenIn': self.USDT,
+            'tokenOut': self.WETH,
+            'fee': 500,
+            'amount': 0,
+        }
+        simulated_amount_out = self.sim.functions.simulateSwapIn(
+            [params_1, params_2]
+        ).call()
+
+        # Scenario 2: USDT -> WETH -> USDT
+        amount_in = 1 * 10 ** self.USDT_DECIMALS
