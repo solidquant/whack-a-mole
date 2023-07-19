@@ -181,14 +181,14 @@ class DexOrder:
         bundle = [{'signed_transaction': signed.rawTransaction}]
         return await self.send_bundle(w3, bundle, retry, block_number)
 
-    def approve_handlers(self,
-                         chain: str,
-                         tokens: List[str],
-                         handlers: List[str],
-                         max_priority_fee_per_gas: float,
-                         max_fee_per_gas: float,
-                         retry: int,
-                         block_number: int = None):
+    async def approve_handlers(self,
+                               chain: str,
+                               tokens: List[str],
+                               handlers: List[str],
+                               max_priority_fee_per_gas: float,
+                               max_fee_per_gas: float,
+                               retry: int,
+                               block_number: int = None):
         """
         You only need to call this once with all the tokens used in your trades
         This function call will automatically set maxint as the approved amount to all the handlers
@@ -290,14 +290,14 @@ class DexOrder:
 
         return list(reversed(params_list))
 
-    def send_order(self,
-                   chain: str,
-                   params: List[Dict[str, Any]],
-                   min_amount_out: float,
-                   max_priority_fee_per_gas: float,
-                   max_fee_per_gas: float,
-                   retry: int,
-                   block_number: int = None):
+    async def send_order(self,
+                         chain: str,
+                         params: List[Dict[str, Any]],
+                         min_amount_out: float,
+                         max_priority_fee_per_gas: float,
+                         max_fee_per_gas: float,
+                         retry: int,
+                         block_number: int = None):
 
         w3 = self.web3[chain]
         nonce = w3.eth.get_transaction_count(self.sender.address)
