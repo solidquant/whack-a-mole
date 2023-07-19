@@ -74,13 +74,13 @@ class WhackAMoleBotV1Tests(TestCase):
         self.bot = self.web3.eth.contract(address=self.BOT, abi=BOT_ABI)
         self.sim = self.web3.eth.contract(address=self.SIMULATOR, abi=SIMULATOR_ABI)
 
-        # Wrap 3 ETH to 3 WETH
-        # Transfer 3 ETH to WETH contract
+        # Wrap ETH to WETH
+        # Transfer ETH to WETH contract
         nonce = self.web3.eth.get_transaction_count(self.signer.address)
         transaction = {
             'from': self.signer.address,
             'to': self.WETH,
-            'value': self.web3.to_wei(3, 'ether'),
+            'value': self.web3.to_wei(10, 'ether'),
             'chainId': 1,
             'nonce': nonce,
             'gas': 200000,

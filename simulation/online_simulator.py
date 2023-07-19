@@ -47,8 +47,6 @@ class OnlineSimulator:
         self.contracts = contracts
         self.handlers = handlers
 
-        self.web3 = {k: Web3(Web3.HTTPProvider(v)) for k, v in rpc_endpoints.items()}
-
         # extract keys from tokens, pools
         self.chains_list = sorted(list(tokens.keys()))
         self.exchanges_list = sorted(set([p['exchange'] for p in pools]))
@@ -63,6 +61,8 @@ class OnlineSimulator:
         self.chain_to_id = {k: i for i, k in enumerate(self.chains_list)}
         self.exchange_to_id = {k: i for i, k in enumerate(self.exchanges_list)}
         self.token_to_id = {k: i for i, k in enumerate(self.tokens_list)}
+
+        self.web3 = {k: Web3(Web3.HTTPProvider(v)) for k, v in rpc_endpoints.items()}
 
         self.sim = {
             chain: self.web3[chain].eth.contract(address=self.contracts[chain], abi=SIMULATOR_ABI)
@@ -182,28 +182,35 @@ if __name__ == '__main__':
 
     Buy, sell should work like CEXs
     """
-    amount_in = 100 * 10 ** 6
+    for i in range(900, 1300, 100):
+        amount_in = i * 10 ** 6
+        print('==========')
+        print('Amount in: ', amount_in)
 
-    buy_path = [[0, 1, 5, 4, 1], [0, 0, 4, 2, 1]]
-    sell_path = [[0, 0, 5, 2, 1], [0, 0, 0, 0, 0]]
+        buy_path = [[0, 1, 5, 2, 1], [0, 0, 0, 0, 0]]
+        sell_path = [[0, 0, 5, 2, 1], [0, 0, 0, 0, 0]]
 
-    buy_pools = [1, 10]
-    sell_pools = [9]
+        buy_pools = [0]
+        sell_pools = [9]
 
-    params = sim.make_params(amount_in, buy_path, sell_path, buy_pools, sell_pools)
+        params = sim.make_params(amount_in, buy_path, sell_path, buy_pools, sell_pools)
 
-    for param in params:
-        print(param)
-    """
-    Output:
-    
-    {'protocol': 1, 'handler': '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', 'tokenIn': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'tokenOut': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'fee': 100, 'amount': 100000000}
-    {'protocol': 1, 'handler': '0x64e8802FE490fa7cc61d3463958199161Bb608A7', 'tokenIn': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'tokenOut': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'fee': 500, 'amount': 0}
-    {'protocol': 1, 'handler': '0x64e8802FE490fa7cc61d3463958199161Bb608A7', 'tokenIn': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'tokenOut': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'fee': 500, 'amount': 0}
-    """
+        for param in params:
+            print(param)
+        """
+        SUS3ETHUSDT/UNI3ETHUSDT
+        
+        - Buy: SUS3ETHUSDT
+        - Sell: UNI3ETHUSDT
+        
+        Output:
+        
+        {'protocol': 1, 'handler': '0x64e8802FE490fa7cc61d3463958199161Bb608A7', 'tokenIn': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'tokenOut': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'fee': 500, 'amount': 20000000000}
+        {'protocol': 1, 'handler': '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', 'tokenIn': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'tokenOut': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'fee': 500, 'amount': 0}
+        """
 
-    simulated_amount_out = sim.simulate(chain, params)
-    print(f'Simulated amount out: {simulated_amount_out / 10 ** 6} USDT')
+        simulated_amount_out = sim.simulate(chain, params)
+        print(f'Simulated amount out: {simulated_amount_out / 10 ** 6} USDT')
 
-    simulated_profit_in_usdt = (simulated_amount_out - amount_in) / 10 ** 6
-    print(f'Simulated profit: {simulated_profit_in_usdt} USDT')
+        simulated_profit_in_usdt = (simulated_amount_out - amount_in) / 10 ** 6
+        print(f'Simulated profit: {simulated_profit_in_usdt} USDT')

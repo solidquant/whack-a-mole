@@ -310,7 +310,6 @@ if __name__ == '__main__':
         WS_ENDPOINTS,
         TOKENS,
         POOLS,
-        TRADING_SYMBOLS,
     )
 
     chain = 'ethereum'
@@ -323,7 +322,7 @@ if __name__ == '__main__':
     dex = DEX(rpc_endpoints,
               tokens,
               pools,
-              TRADING_SYMBOLS)
+              ['ETH/USDT'])
 
     queue = aioprocessing.AioQueue()
 

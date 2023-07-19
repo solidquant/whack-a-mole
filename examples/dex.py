@@ -1,14 +1,14 @@
 import numpy as np
 
 from data.dex import DEX
-from configs import RPC_ENDPOINTS, TOKENS, POOLS, TRADING_SYMBOLS
+from configs import RPC_ENDPOINTS, TOKENS, POOLS
 
 
 if __name__ == '__main__':
     dex = DEX(RPC_ENDPOINTS,
               TOKENS,
               POOLS,
-              TRADING_SYMBOLS)
+              ['ETH/USDT', 'BTC/USDT'])
 
     # Retrieving the price of a specific pool
     idx = dex.get_index('ethereum', 'uniswap', 'ETH', 'USDT', 3)

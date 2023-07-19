@@ -12,13 +12,13 @@ def dex_stream_process(publisher: aioprocessing.AioQueue, chain: Optional[str] =
         dex = DEX(RPC_ENDPOINTS,
                   TOKENS,
                   POOLS,
-                  TRADING_SYMBOLS,
+                  ['ETH/USDT'],
                   2)
     else:
         dex = DEX({chain: RPC_ENDPOINTS[chain]},
                   {chain: TOKENS[chain]},
                   [pool for pool in POOLS if pool['chain'] == chain],
-                  TRADING_SYMBOLS,
+                  ['ETH/USDT'],
                   2)
 
     dex_stream = DexStream(dex, WS_ENDPOINTS, publisher)

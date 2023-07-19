@@ -563,9 +563,9 @@ class DEX(DexBase):
 
 
 if __name__ == '__main__':
-    from configs import RPC_ENDPOINTS, TOKENS, POOLS, TRADING_SYMBOLS
+    from configs import RPC_ENDPOINTS, TOKENS, POOLS
 
     dex = DEX(RPC_ENDPOINTS,
               TOKENS,
               POOLS,
-              TRADING_SYMBOLS)
+              ['ETH/USDT'])

@@ -3,36 +3,24 @@ import time
 import asyncio
 import datetime
 import aioprocessing
+from functools import partial
 from dotenv import load_dotenv
 from multiprocessing import Process
 from typing import Any, Dict, Optional, List
 
 from configs import *
+from execution import DexOrder
 from data import DEX, DexStream
 from simulation import OnlineSimulator
 from external import InfluxDB, Telegram
 
 load_dotenv(override=True)
 
+FLASHBOTS_SIGNING_KEY = os.getenv('FLASHBOTS_SIGNING_KEY')
+FLASHBOTS_PRIVATE_KEY = os.getenv('FLASHBOTS_PRIVATE_KEY')
+
+ETHEREUM_BOT_ADDRESS = os.getenv('ETHEREUM_BOT_ADDRESS')
 ETHEREUM_SIMULATOR_ADDRESS = os.getenv('ETHEREUM_SIMULATOR_ADDRESS')
-
-
-class Pending:
-
-    def __init__(self):
-        self.info = None
-
-    def can_add(self):
-        return self.info is None
-
-    def get_pending(self):
-        return self.info
-
-    def add_pending(self, pending: Dict[str, Any]):
-        self.info = pending
-
-    def delete_pending(self):
-        self.info = None
 
 
 def cycle_name(pools_1: List[int],
@@ -62,7 +50,7 @@ def cycle_name(pools_1: List[int],
 
 def dex_stream_process(publisher: aioprocessing.AioQueue,
                        chain: str,
-                       trading_symbols: List[str] = TRADING_SYMBOLS,
+                       trading_symbols: List[str],
                        max_swaps: int = 3):
 
     pools = [pool for pool in POOLS if pool['chain'] == chain]
@@ -123,20 +111,64 @@ def dex_stream_process(publisher: aioprocessing.AioQueue,
     dex_stream.start_streams()
 
 
-async def data_processor(subscriber: aioprocessing.AioQueue,
-                         chain: str,
-                         symbol: str,
-                         max_bet_size: float):
+class Pending:
 
+    def __init__(self):
+        self.info = None
+
+    def can_add(self):
+        no_info = self.info is None
+        if no_info:
+            return True
+        if not self.info['order_processing']:
+            return True
+
+    def get_pending(self):
+        return self.info
+
+    def add_pending(self, pending: Dict[str, Any]):
+        self.info = pending
+
+    def set_order_processing(self):
+        self.info['order_processing'] = True
+
+    def delete_pending(self):
+        self.info = None
+
+
+async def strategy(subscriber: aioprocessing.AioQueue,
+                   chain: str,
+                   max_bet_size: float,
+                   target_spread: float = 0.0,
+                   retry_number: int = 2,
+                   debug: bool = False):
+
+    rpc_endpoints = {chain: RPC_ENDPOINTS[chain]}
+    tokens = {chain: TOKENS[chain]}
     pools = [pool for pool in POOLS if pool['chain'] == chain]
+    simulator_contracts = {chain: ETHEREUM_SIMULATOR_ADDRESS}
+    simulator_handlers = {chain: SIMULATION_HANDLERS[chain]}
+    execution_contracts = {chain: ETHEREUM_BOT_ADDRESS}
+    execution_handlers = {chain: EXECUTION_HANDLERS[chain]}
 
+    # If .env vars relavant to InfluxDB, Telegram aren't set,
+    # they'll simply stand there as placeholders, doing nothing on send calls
     influxdb = InfluxDB()
     telegram = Telegram()
-    simulator = OnlineSimulator(rpc_endpoints={chain: RPC_ENDPOINTS[chain]},
-                                tokens={chain: TOKENS[chain]},
+
+    simulator = OnlineSimulator(rpc_endpoints=rpc_endpoints,
+                                tokens=tokens,
                                 pools=pools,
-                                contracts={chain: ETHEREUM_SIMULATOR_ADDRESS},
-                                handlers={chain: SIMULATION_HANDLERS[chain]})
+                                contracts=simulator_contracts,
+                                handlers=simulator_handlers)
+
+    execution = DexOrder(private_key=FLASHBOTS_PRIVATE_KEY,
+                         signing_key=FLASHBOTS_SIGNING_KEY,
+                         rpc_endpoints=rpc_endpoints,
+                         tokens=tokens,
+                         pools=pools,
+                         contracts=execution_contracts,
+                         handlers=execution_handlers)
 
     compare_paths = {}
     gas_info = {}
@@ -145,10 +177,10 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
     pending = Pending()
 
     """
-    The cost of WhackAMoleBotV1 swaps
+    The estimated cost of WhackAMoleBotV1 swaps
     Current gas amount is a rough estimation, for a optimized result,
     make sure to find better estimates.
-    These values are overestimated, thus, will take a conservative approach.
+    These values are overestimated for a more strict/conservative simulation result.
     """
     gas_costs = {
         0: 100000,  # base cost
@@ -171,7 +203,7 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
 
         spread = spreads[pending_info['key']]
 
-        if spread <= 0:
+        if spread <= target_spread:
             pending.delete_pending()
             return
 
@@ -204,14 +236,15 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
         if min_amount_in_usdt <= max_bet_size:
             # we simulate using max_bet_size and if the result is promising we send the order to Flashbots
             usdt_decimals = simulator.tokens[chain]['USDT'][1]
-            min_amount_in = max_bet_size * 10 ** usdt_decimals
-            params = simulator.make_params(amount_in=min_amount_in_usdt,
-                                           buy_path=pending_info['buy_path'],
-                                           sell_path=pending_info['sell_path'],
-                                           buy_pools=pending_info['buy_pools'],
-                                           sell_pools=pending_info['sell_pools'])
+            # min_amount_in = max_bet_size * 10 ** usdt_decimals
+            min_amount_in = int(min_amount_in_usdt * 1.1) * 10 ** usdt_decimals
+            sim_params = simulator.make_params(amount_in=min_amount_in,
+                                               buy_path=pending_info['buy_path'],
+                                               sell_path=pending_info['sell_path'],
+                                               buy_pools=pending_info['buy_pools'],
+                                               sell_pools=pending_info['sell_pools'])
             s = time.time()
-            simulated_amount_out = simulator.simulate(chain, params)
+            simulated_amount_out = simulator.simulate(chain, sim_params)
             e = time.time()
             simulation_took = e - s
             simulated_profit_in_usdt = (simulated_amount_out - min_amount_in) / 10 ** usdt_decimals
@@ -220,13 +253,33 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
             print(f'Simulated profit in USDT: {final_profit} (Took: {round(simulation_took, 3)} secs)')
 
             if final_profit > 0:
-                # TODO: execute order here
-                await telegram.send(f'Block #{pending_info["block"]} {pending_info["key"]}: +{final_profit} USDT')
-            else:
-                pending.delete_pending()
-        else:
-            pending.delete_pending()
+                pending.set_order_processing()
 
+                # execute order here if program started as non-debug mode
+                if not debug:
+                    exe_params = execution.make_params(amount_in=min_amount_in,
+                                                       buy_path=pending_info['buy_path'],
+                                                       sell_path=pending_info['sell_path'],
+                                                       buy_pools=pending_info['buy_pools'],
+                                                       sell_pools=pending_info['sell_pools'])
+                    s = time.time()
+                    receipts = execution.send_order(chain=chain,
+                                                    params=exe_params,
+                                                    min_amount_out=int(simulated_amount_out * 0.999),  # 0.1% slippage tolerance
+                                                    max_priority_fee_per_gas=gas_info['max_priority_fee_per_gas'],
+                                                    max_fee_per_gas=gas_info['max_fee_per_gas'],
+                                                    retry=retry_number,
+                                                    block_number=gas_info['block'])
+                    e = time.time()
+                    execution_took = e - s
+                    print(f'Execution success. Took: {round(execution_took, 3)} secs: {receipts}')
+
+            await telegram.send(f'Block #{pending_info["block"]} {pending_info["key"]} ({round(spread, 2)}%): {final_profit} USDT')
+        else:
+            await telegram.send(f'Block #{pending_info["block"]} {pending_info["key"]} ({round(spread, 2)}%) min amount of USDT needed to profit: {round(min_amount_in_usdt, 3)} USDT')
+        pending.delete_pending()
+
+    # Main strategy loop
     while True:
         try:
             data = await subscriber.coro_get()
@@ -291,29 +344,29 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
                         max_spread_key = key_1
                         max_spread = spread_1
                         max_buy_sell_price = [price_2, price_1]
-                        max_path_index = path_index
+                        max_path_index = list(reversed(path_index))  # buy pool index, sell pool index
 
                     if spread_2 > max_spread:
                         max_spread_key = key_2
                         max_spread = spread_2
                         max_buy_sell_price = [price_1, price_2]
-                        max_path_index = path_index
+                        max_path_index = list(path_index)  # buy pool index, sell pool index
 
-                    spreads[key_1] = round(spread_1, 3)
-                    spreads[key_2] = round(spread_2, 3)
+                    spreads[key_1] = spread_1
+                    spreads[key_2] = spread_2
 
                 await influxdb.send('DEX_ARB_BASE_ETHUSDT', spreads)
                 e = time.time()
-                max_msg = f'{max_spread_key}: {spreads[max_spread_key]}%'
+                max_msg = f'{max_spread_key}: {round(spreads[max_spread_key], 3)}%'
                 print(f'[{datetime.datetime.now()}] Update took: {round(e - s, 4)} secs. {max_msg}')
 
                 # add newly detected edge (positive spread) to pending
                 # we process one edge a time to make our lives easier
-                if pending.can_add() and max_spread > 0:
+                if pending.can_add() and max_spread > target_spread:
                     # before we add the new max_spread_key, first check if the spread can cover
                     # gas costs with our max_bet_size
-                    buy_path = data['path'][max_path_index[1]]
-                    sell_path = data['path'][max_path_index[0]]
+                    buy_path = data['path'][max_path_index[0]]
+                    sell_path = data['path'][max_path_index[1]]
 
                     """
                     Calculate the estimated_gas_used given:
@@ -339,9 +392,10 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
                         'cancel_at': data['block'] + 1,  # cancel after 1 block
                         'buy_path': buy_path,
                         'sell_path': sell_path,
-                        'buy_pools': data['pool_indexes'][max_path_index[1]],
-                        'sell_pools': data['pool_indexes'][max_path_index[0]],
+                        'buy_pools': data['pool_indexes'][max_path_index[0]],
+                        'sell_pools': data['pool_indexes'][max_path_index[1]],
                         'estimated_gas_used': estimated_gas_used,
+                        'order_processing': False,
                     }
                     pending.add_pending(pending_info)
 
@@ -354,16 +408,19 @@ async def data_processor(subscriber: aioprocessing.AioQueue,
 
 async def main():
     chain = 'ethereum'
-    max_swaps = 2
+    max_swaps = 3
     trading_symbols = ['ETH/USDT']  # other symbols won't work at the moment, because of gas cost calculations
-    max_bet_size = 2000  # in USDT, because we are buying ETH with USDT
+    max_bet_size = 20000  # in USDT, because we are buying ETH with USDT
+    target_spread = 0.4  # minimum target of 0.4% spread
+    retry_number = 2
+    debug = True  # running in debug mode won't execute orders. It'll simply send data to InfluxDB, Telegram
 
     queue = aioprocessing.AioQueue()
 
     p1 = Process(target=dex_stream_process, args=(queue, chain, trading_symbols, max_swaps,))
     p1.start()
 
-    await data_processor(queue, chain, trading_symbols[0], max_bet_size)
+    await strategy(queue, chain, max_bet_size, target_spread, retry_number, debug)
 
 
 if __name__ == '__main__':

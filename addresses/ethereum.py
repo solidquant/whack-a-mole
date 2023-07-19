@@ -45,8 +45,8 @@ SIMULATION_HANDLERS = {
 }
 
 EXECUTION_HANDLERS = {
-    'uniswap_v2': '',
-    'sushiswap_v2': '',
-    'uniswap_v3': '',
-    'sushiswap_v3': '',
+    'uniswap_v2': '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D',    # router2
+    'sushiswap_v2': '0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F',  # router2
+    'uniswap_v3': '0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45',    # swap router2
+    'sushiswap_v3': '',  # TODO: Sushiswap V3 doesn't have SwapRouter2, needs to use pool contract
 }

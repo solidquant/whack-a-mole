@@ -8,8 +8,7 @@ import "openzeppelin-contracts/contracts/token/erc20/utils/SafeERC20.sol";
 import "./protocols/uniswap/IUniswapV2Router.sol";
 import "./protocols/uniswap/IUniswapV3SwapRouter.sol";
 
-// Deployment gas: 777,938
-// With optimizations: 1,004,388
+// Deployment gas: 1,004,388
 contract WhackAMoleBotV1 {
     using SafeERC20 for IERC20;
 
@@ -87,8 +86,6 @@ contract WhackAMoleBotV1 {
         }
     }
 
-    // 2-hop swap gas: 186,308
-    // 3-hop swap gas: 220,548
     function whack(
         SwapParams[] calldata paramsArray,
         uint256 minAmountOut
@@ -123,7 +120,6 @@ contract WhackAMoleBotV1 {
         return amountOut;
     }
 
-    // Gas: 133,140
     function uniswapV2Swap(
         SwapParams memory params
     ) internal returns (uint256 amountOut) {
@@ -144,10 +140,10 @@ contract WhackAMoleBotV1 {
         return amounts[1];
     }
 
-    // Gas: 117,119
     function uniswapV3Swap(
         SwapParams memory params
     ) internal returns (uint256 amountOut) {
+        // Sushiswap V3 doesn't have SwapRouter, needs to reimplement this to use Pools
         ISwapRouter.ExactInputSingleParams memory singleParams = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: params.tokenIn,
