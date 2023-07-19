@@ -376,6 +376,8 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                     estimated_gas_used = gas_costs[0]  # base cost
                     for buy_sell_path in [buy_path, sell_path]:
                         for p in buy_sell_path:
+                            if sum(p) == 0:
+                                continue
                             version = p[4]
                             estimated_gas_used += gas_costs[version + 2]  # V2 = 0, V3 = 1
 
@@ -398,6 +400,7 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                         'order_processing': False,
                     }
                     pending.add_pending(pending_info)
+                    print(pending_info)
 
                 await _process_pending_order(pending)
 
@@ -411,7 +414,7 @@ async def main():
     max_swaps = 3
     trading_symbols = ['ETH/USDT']  # other symbols won't work at the moment, because of gas cost calculations
     max_bet_size = 20000  # in USDT, because we are buying ETH with USDT
-    target_spread = 0.4  # minimum target of 0.4% spread
+    target_spread = 0.15  # minimum target of 0.4% spread
     retry_number = 2
     debug = True  # running in debug mode won't execute orders. It'll simply send data to InfluxDB, Telegram
 

@@ -182,7 +182,7 @@ if __name__ == '__main__':
 
     Buy, sell should work like CEXs
     """
-    for i in range(900, 1300, 100):
+    for i in range(100, 1000, 100):
         amount_in = i * 10 ** 6
         print('==========')
         print('Amount in: ', amount_in)
@@ -200,13 +200,13 @@ if __name__ == '__main__':
         """
         SUS3ETHUSDT/UNI3ETHUSDT
         
-        - Buy: SUS3ETHUSDT
-        - Sell: UNI3ETHUSDT
+        - Buy: UNI3ETHUSDT
+        - Sell: SUS3ETHUSDT
         
         Output:
         
-        {'protocol': 1, 'handler': '0x64e8802FE490fa7cc61d3463958199161Bb608A7', 'tokenIn': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'tokenOut': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'fee': 500, 'amount': 20000000000}
-        {'protocol': 1, 'handler': '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', 'tokenIn': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'tokenOut': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'fee': 500, 'amount': 0}
+        {'protocol': 1, 'handler': '0x61fFE014bA17989E743c5F6cB21bF9697530B21e', 'tokenIn': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'tokenOut': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'fee': 500, 'amount': 100000000}
+        {'protocol': 1, 'handler': '0x64e8802FE490fa7cc61d3463958199161Bb608A7', 'tokenIn': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 'tokenOut': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'fee': 500, 'amount': 0}
         """
 
         simulated_amount_out = sim.simulate(chain, params)

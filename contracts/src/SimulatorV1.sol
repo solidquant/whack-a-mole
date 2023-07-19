@@ -7,8 +7,7 @@ import "./protocols/uniswap/UniswapV2Library.sol";
 import "./protocols/uniswap/IQuoterV2.sol";
 import "./protocols/curve/ICurvePool.sol";
 
-// Deployment gas: 610,194
-// With optimizations: 773,502
+// Deployment gas: 773,502
 contract SimulatorV1 {
     using SafeMath for uint256;
 
