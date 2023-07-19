@@ -20,3 +20,9 @@ What we know for certain is that you'll need a fast pair of eyes on the market a
 and an extra fast execution engine to capture the moment without latency.
 
 Will our beloved Python be able to accomplish this? We'll see 😎
+
+---
+
+Check out my blog post describing in detail what this project attempts to do, and how you can use it.
+
+[Go to blog 👉](https://medium.com/@solidquant/how-i-built-my-first-mev-arbitrage-bot-introducing-whack-a-mole-66d91657152e)
