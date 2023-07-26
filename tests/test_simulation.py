@@ -1,4 +1,5 @@
 import json
+import eth_abi
 import datetime
 from web3 import Web3
 from unittest import TestCase
@@ -35,9 +36,11 @@ class SimulationTests(TestCase):
 
     WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
     USDT = '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+    DAI = '0x6B175474E89094C44Da98b954EedeAC495271d0F'
 
     WETH_DECIMALS = 18
     USDT_DECIMALS = 6
+    DAI_DECIMALS = 18
 
     POOL_V3_FEE = 500
 
@@ -46,7 +49,8 @@ class SimulationTests(TestCase):
     ROUTER2 = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
 
     # WETH-USDT Uniswap V3 pool
-    POOL_V3 = '0x11b815efB8f581194ae79006d24E0d814B7697F6'
+    # POOL_V3 = '0x11b815efB8f581194ae79006d24E0d814B7697F6'
+    POOL_V3 = '0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8'
     QUOTER2 = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e'
     SWAP_ROUTER = '0xE592427A0AEce92De3Edee1F18E0157C05861564'
 
@@ -72,23 +76,6 @@ class SimulationTests(TestCase):
 
         self.sim_v2 = UniswapV2Simulator()
         self.sim_v3 = UniswapV3Simulator()
-
-        # Wrap 1 ETH to 1 WETH
-        # Transfer 1 ETH to WETH contract
-        nonce = self.web3.eth.get_transaction_count(self.signer.address)
-        transaction = {
-            'from': self.signer.address,
-            'to': self.WETH,
-            'value': self.web3.toWei(1, 'ether'),
-            'chainId': 1,
-            'nonce': nonce,
-            'gas': 200000,
-            'maxFeePerGas': self.web3.toWei(100, 'gwei'),  # set at randomly high gas price
-            'maxPriorityFeePerGas': self.web3.toWei(50, 'gwei'),  # set at random
-        }
-        signed = self.signer.sign_transaction(transaction)
-        tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
-        _ = self.web3.eth.get_transaction(tx_hash)
 
     # def test_sim_v2_get_amount_out(self):
     #     token_in = self.WETH
@@ -166,6 +153,45 @@ class SimulationTests(TestCase):
         """
         import math
 
+        # # Wrap ETH to WETH
+        # nonce = self.web3.eth.get_transaction_count(self.signer.address)
+        # transaction = {
+        #     'from': self.signer.address,
+        #     'to': self.WETH,
+        #     'value': self.web3.to_wei(100, 'ether'),
+        #     'chainId': 1,
+        #     'nonce': nonce,
+        #     'gas': 200000,
+        #     'maxFeePerGas': self.web3.to_wei(100, 'gwei'),  # set at randomly high gas price
+        #     'maxPriorityFeePerGas': self.web3.to_wei(50, 'gwei'),  # set at random
+        # }
+        # signed = self.signer.sign_transaction(transaction)
+        # tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
+        # _ = self.web3.eth.get_transaction(tx_hash)
+        #
+        # weth_balance = self.weth.functions.balanceOf(self.signer.address).call()
+        # print('WETH: ', weth_balance)
+
+        # Approve WETH
+        nonce = self.web3.eth.get_transaction_count(self.signer.address)
+        approve_transaction = self.weth.functions.approve(
+            self.pool_v3.address, 100 * 10 ** 18
+        ).build_transaction({
+            'from': self.signer.address,
+            'chainId': 1,
+            'nonce': nonce,
+            'gas': 200000,
+            'maxFeePerGas': self.web3.to_wei(100, 'gwei'),
+            'maxPriorityFeePerGas': self.web3.to_wei(50, 'gwei'),
+        })
+        signed = self.signer.sign_transaction(approve_transaction)
+        tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
+        _ = self.web3.eth.get_transaction(tx_hash)
+
+        allowance = self.weth.functions.allowance(self.signer.address, self.SWAP_ROUTER).call()
+        print('WETH allowance: ', allowance)
+
+
         token_in = self.WETH
         token0 = self.pool_v3.functions.token0().call()
         token0_in = token_in == token0
@@ -179,109 +205,106 @@ class SimulationTests(TestCase):
         upper_tick_idx = tick_spacing * (current_tick // tick_spacing + 1)
         lower_tick_idx = tick_spacing * (current_tick // tick_spacing)
 
+        print(upper_tick_idx, current_tick, lower_tick_idx)
+
         print(slot0)
         print(tick_spacing)
         print(liquidity)
 
-        price_range = self.sim_v3.tick_to_price_range(current_tick, tick_spacing, self.WETH_DECIMALS, self.USDT_DECIMALS, token0_in)
+        price_range = self.sim_v3.tick_to_price_range(current_tick, tick_spacing, self.DAI_DECIMALS, self.WETH_DECIMALS, token0_in)
         print('Price range: ', price_range)
 
-        curr_price = self.sim_v3.sqrtx96_to_price(sqrt_price, self.WETH_DECIMALS, self.USDT_DECIMALS, token0_in)
+        curr_price = self.sim_v3.sqrtx96_to_price(sqrt_price, self.DAI_DECIMALS, self.WETH_DECIMALS, token0_in)
         print('Curr price: ', curr_price)
 
+        sqrt_price_tick = self.sim_v3.sqrtx96_to_tick(sqrt_price)
+        print(sqrt_price_tick)
+
+        p = self.sim_v3.tick_to_price(sqrt_price_tick, self.DAI_DECIMALS, self.WETH_DECIMALS)
+        print(p)
+
+        target_price = self.sim_v3.tick_to_price(lower_tick_idx, self.DAI_DECIMALS, self.WETH_DECIMALS)
+        print('target price: ', 1 / target_price)
+        price_diff = (1 / target_price) - curr_price
+        price_diff_liq = price_diff * liquidity
+        print(price_diff_liq / 10 ** self.DAI_DECIMALS)
 
 
-        upper_price = 1.0001 ** (upper_tick_idx / 2)
-        print(upper_tick_idx, upper_price)
-        print(sqrt_price * 2 ** (-96))
-        max_amount_in = (upper_price - (sqrt_price * 2 ** (-96))) * liquidity
-        print(max_amount_in)
-        max_amount_in = max_amount_in / 10 ** self.WETH_DECIMALS
-        print('max_amount_in: ', max_amount_in)
 
-        q96 = 2 ** 96
-        eth = 10 ** self.WETH_DECIMALS
-        amount_in = int(max_amount_in * eth)
-        price_diff = int((amount_in * q96) // liquidity)
-        print('amount_in: ', amount_in)
-        print('price_diff: ', price_diff)
-
-        sqrt_price_next = sqrt_price + price_diff
-        print(sqrt_price, price_diff, sqrt_price_next)
-        price_next = self.sim_v3.sqrtx96_to_price(sqrt_price_next, self.WETH_DECIMALS, self.USDT_DECIMALS, token0_in)
-
-        print('price next: ', sqrt_price_next)
-        print('new price: ', price_next)
-
-        usdt_balance_before = self.usdt.functions.balanceOf(self.signer.address).call()
-
-        # perform real swap
-
-        weth_balance = self.weth.functions.balanceOf(self.signer.address).call()
-        print('weth: ', weth_balance)
-
-        amount_in = int(max_amount_in * eth)
-
-        # approve swap router first
         nonce = self.web3.eth.get_transaction_count(self.signer.address)
-        approve_transaction = self.weth.functions.approve(self.SWAP_ROUTER, weth_balance).build_transaction({
+        params = (
+            self.WETH,
+            self.DAI,
+            3000,
+            self.signer.address,
+            99999999999999999,
+            1 * 10 ** self.WETH_DECIMALS,
+            0,
+            0,
+        )
+        swap_transaction = self.pool_v3.functions.swap(
+            self.signer.address,
+            False,
+            1 * 10 ** 18,
+            4400000000,
+            ''
+        ).build_transaction({
             'from': self.signer.address,
             'chainId': 1,
             'nonce': nonce,
-            'gas': 200000,
-            'maxFeePerGas': self.web3.toWei(100, 'gwei'),
-            'maxPriorityFeePerGas': self.web3.toWei(50, 'gwei'),
+            'gas': 1200000,
+            'maxFeePerGas': self.web3.to_wei(100, 'gwei'),
+            'maxPriorityFeePerGas': self.web3.to_wei(50, 'gwei'),
         })
-        signed = self.signer.sign_transaction(approve_transaction)
-        tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
-        _ = self.web3.eth.get_transaction(tx_hash)
-
-        # allowance = self.weth.functions.allowance(self.signer.address, self.SWAP_ROUTER).call()
-        # print('weth allowance: ', allowance)
-
-        # perform swap
-        nonce = self.web3.eth.get_transaction_count(self.signer.address)
-        params = {
-            'tokenIn': self.WETH,
-            'tokenOut': self.USDT,
-            'fee': self.POOL_V3_FEE,
-            'recipient': self.signer.address,
-            'deadline': int(datetime.datetime.now().timestamp()) + 600000,
-            'amountIn': amount_in,
-            'amountOutMinimum': 0,
-            'sqrtPriceLimitX96': 0,
-        }
-        print(tuple(params.values()))
-        swap_transaction = self.swap_router.functions.exactInputSingle(tuple(params.values())).build_transaction({
-            'from': self.signer.address,
-            'chainId': 1,
-            'nonce': nonce,
-            'gas': 300000,
-            'maxFeePerGas': self.web3.toWei(100, 'gwei'),
-            'maxPriorityFeePerGas': self.web3.toWei(50, 'gwei'),
-        })
+        print(swap_transaction)
         signed = self.signer.sign_transaction(swap_transaction)
         tx_hash = self.web3.eth.send_raw_transaction(signed.rawTransaction)
         tx = self.web3.eth.get_transaction(tx_hash)
-        print(tx)
 
-        usdt_balance_after = self.usdt.functions.balanceOf(self.signer.address).call()
-        print(usdt_balance_before)
-        print(usdt_balance_after)
+        replay_tx = {
+            'to': tx['to'],
+            'from': tx['from'],
+            'value': tx['value'],
+            'data': tx['input'],
+        }
+
+        self.web3.eth.call(replay_tx, tx.blockNumber - 1)
+
+        print('swapped')
 
         slot0 = self.pool_v3.functions.slot0().call()
-        print(slot0)
+        liquidity = self.pool_v3.functions.liquidity().call()
 
-        try:
-            replay_tx = {
-                'to': tx['to'],
-                'from': tx['from'],
-                'value': tx['value'],
-                'data': tx['input'],
-            }
-            self.web3.eth.call(replay_tx, tx.blockNumber - 1)
-        except Exception as e:
-            print(e)
+        print('slot0: ', slot0)
+        print('liquidity: ', liquidity)
+
+
+
+        # upper_price = 1.0001 ** (upper_tick_idx / 2)
+        # print(upper_tick_idx, upper_price)
+        # print(sqrt_price * 2 ** (-96))
+        # max_amount_in = (upper_price - (sqrt_price * 2 ** (-96))) * liquidity
+        # print(max_amount_in)
+        # max_amount_in = max_amount_in / 10 ** self.WETH_DECIMALS
+        # print('max_amount_in: ', max_amount_in)
+        #
+        # q96 = 2 ** 96
+        # eth = 10 ** self.WETH_DECIMALS
+        # amount_in = int(max_amount_in * eth)
+        # price_diff = int((amount_in * q96) // liquidity)
+        # print('amount_in: ', amount_in)
+        # print('price_diff: ', price_diff)
+        #
+        # sqrt_price_next = sqrt_price + price_diff
+        # print(sqrt_price, price_diff, sqrt_price_next)
+        # price_next = self.sim_v3.sqrtx96_to_price(sqrt_price_next, self.WETH_DECIMALS, self.USDT_DECIMALS, token0_in)
+        #
+        # print('price next: ', sqrt_price_next)
+        # print('new price: ', price_next)
+        #
+        # usdt_balance_before = self.usdt.functions.balanceOf(self.signer.address).call()
+
+
 
         #     path = [self.WETH, self.USDT]
         #     nonce = self.web3.eth.get_transaction_count(self.signer.address)

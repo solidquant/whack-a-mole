@@ -5,6 +5,7 @@ import asyncio
 import datetime
 import eth_utils
 import websockets
+import numpy as np
 import aioprocessing
 from functools import partial
 from typing import Any, Dict, Optional
@@ -72,8 +73,17 @@ class CexStream:
                 print(data)
 
     async def stream_bybit_usdm_orderbook(self):
+        """
+        Bybit doesn't provide you with the option to stream orderbook snapshot data.
+        We'll have to implement the orderbook snapshot on our own.
+        """
+        max_depth = 50
+
+        bids = np.zeros((max_depth, 2))
+        asks = np.zeros((max_depth, 2))
+
         async with websockets.connect('wss://stream.bybit.com/v5/public/linear') as ws:
-            args = [f'orderbook.50.{s.replace("/", "").upper()}' for s in self.cex.trading_symbols]
+            args = [f'orderbook.{max_depth}.{s.replace("/", "").upper()}' for s in self.cex.trading_symbols]
             subscription = {
                 'op': 'subscribe',
                 'args': args,
@@ -88,12 +98,12 @@ class CexStream:
 
 
 if __name__ == '__main__':
-    from configs import TRADING_SYMBOLS
+    trading_symbols = ['BTC/USDT']
 
-    cex = CEX(TRADING_SYMBOLS)
+    cex = CEX(trading_symbols)
 
     queue = aioprocessing.AioQueue()
 
     cex_streams = CexStream(cex, queue, False)
 
-    asyncio.run(cex_streams.stream_okx_usdm_orderbook())
+    asyncio.run(cex_streams.stream_bybit_usdm_orderbook())

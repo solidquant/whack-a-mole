@@ -1,3 +1,4 @@
+import math
 import numpy as np
 
 
@@ -24,6 +25,14 @@ class UniswapV3Simulator:
     def __init__(self):
         pass
 
+    def sqrtx96_to_tick(self, sqrtx96: float):
+        return math.floor(
+            math.log(
+                sqrtx96 * 2 ** (-96),
+                math.sqrt(1.0001)
+            )
+        )
+
     def sqrtx96_to_price(self,
                          sqrtx96: float,
                          decimals0: int,
@@ -38,6 +47,12 @@ class UniswapV3Simulator:
         price = ((sqrtx96 / (2 ** 96)) ** 2) * (10 ** (decimals0 - decimals1))
         return price if token0_in else 1 / price
 
+    def tick_to_price(self,
+                      tick: float or np.ndarray,
+                      decimals0: float,
+                      decimals1: float) -> float or np.ndarray:
+        return (1.0001 ** tick) * (10 ** (decimals0 - decimals1))
+
     def tick_to_price_range(self,
                             current_tick: float,
                             tick_spacing: float,
@@ -50,8 +65,7 @@ class UniswapV3Simulator:
         lower_tick = tick_spacing * (current_tick // tick_spacing)
         upper_tick = tick_spacing * (current_tick // tick_spacing + 1)
         ticks = np.array([lower_tick, upper_tick])
-        tick_range = 1.0001 ** ticks
-        price_range = tick_range * (10 ** (decimals0 - decimals1))
+        price_range = self.tick_to_price(ticks, decimals0, decimals1)
         return price_range if token0_in else (1 / price_range)[::-1]
 
     def get_amount_out(self):

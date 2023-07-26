@@ -376,6 +376,8 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                     estimated_gas_used = gas_costs[0]  # base cost
                     for buy_sell_path in [buy_path, sell_path]:
                         for p in buy_sell_path:
+                            if sum(p) == 0:
+                                continue
                             version = p[4]
                             estimated_gas_used += gas_costs[version + 2]  # V2 = 0, V3 = 1
 
