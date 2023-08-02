@@ -52,7 +52,6 @@ def dex_stream_process(publisher: aioprocessing.AioQueue,
                        chain: str,
                        trading_symbols: List[str],
                        max_swaps: int = 3):
-
     pools = [pool for pool in POOLS if pool['chain'] == chain]
 
     dex = DEX({chain: RPC_ENDPOINTS[chain]},
@@ -67,24 +66,24 @@ def dex_stream_process(publisher: aioprocessing.AioQueue,
     Trying to find possible cyclic arbitrage paths
     Say there are paths as such:
     - [0], [5]
-    
+
     Path 0: Uniswap V3 ETH/USDT
     Path 5: Uniswap V2 ETH/USDT
-    
+
     In this case, this is a possible cyclic arbitrage path:
-    
+
     1. Uniswap V3 BUY and Uniswap V2 SELL
     BUY: Uniswap V3 USDT -> ETH
     SELL: Uniswap V2 ETH -> USDT
-    
+
     2. Uniswap V2 BUY and Uniswap V3 SELL
     BUY: Uniswap V2 USDT -> ETH
     SELL: Uniswap V3 ETH -> USDT
-    
+
     This type of cyclic arbitrage paths only work when two conditions are met:
     Condition #1: the first pool is different
     Condition #2: the last pool is different
-    
+
     compare_paths is a dictionary of possible cyclic arbitrage path pairs
     """
     compare_paths = {s: {} for s in trading_symbols}
@@ -142,7 +141,6 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                    target_spread: float = 0.0,
                    retry_number: int = 2,
                    debug: bool = False):
-
     rpc_endpoints = {chain: RPC_ENDPOINTS[chain]}
     tokens = {chain: TOKENS[chain]}
     pools = [pool for pool in POOLS if pool['chain'] == chain]
@@ -184,8 +182,8 @@ async def strategy(subscriber: aioprocessing.AioQueue,
     """
     gas_costs = {
         0: 100000,  # base cost
-        2: 40000,   # V2 1-hop cost
-        3: 50000,   # V3 1-hop cost
+        2: 40000,  # V2 1-hop cost
+        3: 50000,  # V3 1-hop cost
     }
 
     async def _process_pending_order(pending: Pending):
@@ -211,7 +209,7 @@ async def strategy(subscriber: aioprocessing.AioQueue,
         We simulate using max_fee_per_gas as the gas price
         This is to conservatively calculate the min_amount_in to be profitable
         assuming we use gas at the highest cost
-        
+
         We also assume the quote of gas_price is at sell_price,
         which is higher than that of buy_price.
         This is another mechanism to overestimate the cost for a more realistic simulation result.
@@ -265,7 +263,8 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                     s = time.time()
                     receipts = execution.send_order(chain=chain,
                                                     params=exe_params,
-                                                    min_amount_out=int(simulated_amount_out * 0.999),  # 0.1% slippage tolerance
+                                                    min_amount_out=int(simulated_amount_out * 0.999),
+                                                    # 0.1% slippage tolerance
                                                     max_priority_fee_per_gas=gas_info['max_priority_fee_per_gas'],
                                                     max_fee_per_gas=gas_info['max_fee_per_gas'],
                                                     retry=retry_number,
@@ -274,9 +273,11 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                     execution_took = e - s
                     print(f'Execution success. Took: {round(execution_took, 3)} secs: {receipts}')
 
-            await telegram.send(f'Block #{pending_info["block"]} {pending_info["key"]} ({round(spread, 2)}%): {final_profit} USDT')
+            await telegram.send(
+                f'Block #{pending_info["block"]} {pending_info["key"]} ({round(spread, 2)}%): {final_profit} USDT')
         else:
-            await telegram.send(f'Block #{pending_info["block"]} {pending_info["key"]} ({round(spread, 2)}%) min amount of USDT needed to profit: {round(min_amount_in_usdt, 3)} USDT')
+            await telegram.send(
+                f'Block #{pending_info["block"]} {pending_info["key"]} ({round(spread, 2)}%) min amount of USDT needed to profit: {round(min_amount_in_usdt, 3)} USDT')
         pending.delete_pending()
 
     # Main strategy loop
@@ -302,14 +303,14 @@ async def strategy(subscriber: aioprocessing.AioQueue,
 
                 """
                 Take 2-step operation before sending order transaction:
-                
+
                 1. Filtering: Calculate simple spread using price quotes (w/o consideration of price impact)
                               Filter out paths that had a spread over 0
-                
+
                 2. Simulating: If simple spread calculated above was above 0, it is worth simulating for price impact
                    Thus, use SimulatorV1 contract to simulate the amount_out of the potentially profitable paths
                    But to make this simpler, we simply simulate the most profitable path
-                   
+
                 This means that our simulations are done online. This will take some time, and will need to be
                 ported offline to get the best performance out
                 """
@@ -390,7 +391,7 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                     pending_info = {
                         'key': max_spread_key,
                         'max_buy_sell_price': max_buy_sell_price,
-                        'block': data['block'],          # block at which the edge was detected
+                        'block': data['block'],  # block at which the edge was detected
                         'cancel_at': data['block'] + 1,  # cancel after 1 block
                         'buy_path': buy_path,
                         'sell_path': sell_path,
@@ -400,6 +401,7 @@ async def strategy(subscriber: aioprocessing.AioQueue,
                         'order_processing': False,
                     }
                     pending.add_pending(pending_info)
+                    print(pending_info)
 
                 await _process_pending_order(pending)
 
@@ -413,7 +415,7 @@ async def main():
     max_swaps = 3
     trading_symbols = ['ETH/USDT']  # other symbols won't work at the moment, because of gas cost calculations
     max_bet_size = 20000  # in USDT, because we are buying ETH with USDT
-    target_spread = 0.4  # minimum target of 0.4% spread
+    target_spread = 0.15  # minimum target of 0.4% spread
     retry_number = 2
     debug = True  # running in debug mode won't execute orders. It'll simply send data to InfluxDB, Telegram
 

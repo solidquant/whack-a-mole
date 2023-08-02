@@ -21,6 +21,15 @@ and an extra fast execution engine to capture the moment without latency.
 
 Will our beloved Python be able to accomplish this? We'll see 😎
 
+### Example Strategy #1: DEX arbitrage
+
+The **main** branch is likely to go through a lot of changes, so to run an example that runs without breaking,
+you should switch to the **examples/strategy/dex_arb_base** branch before running **main.py**. Run:
+
+```
+git checkout examples/strategy/dex_arb_base
+```
+
 ---
 
 Check out my blog post describing in detail what this project attempts to do, and how you can use it.
