@@ -138,7 +138,7 @@ class DexStream:
                     s = time.time()
                     block_number = int(event['blockNumber'], base=16)
                     pool = pools[address]
-                    data = eth_abi.decode_abi(
+                    data = eth_abi.decode(
                         ['uint112', 'uint112'],
                         eth_utils.decode_hex(event['data'])
                     )
@@ -195,7 +195,7 @@ class DexStream:
                     s = time.time()
                     block_number = int(event['blockNumber'], base=16)
                     pool = pools[address]
-                    data = eth_abi.decode_abi(
+                    data = eth_abi.decode(
                         ['int256', 'int256', 'uint160', 'uint128', 'int24'],
                         eth_utils.decode_hex(event['data'])
                     )
