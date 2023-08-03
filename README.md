@@ -35,3 +35,9 @@ git checkout examples/strategy/dex_arb_base
 Check out my blog post describing in detail what this project attempts to do, and how you can use it.
 
 [Go to blog 👉](https://medium.com/@solidquant/how-i-built-my-first-mev-arbitrage-bot-introducing-whack-a-mole-66d91657152e)
+
+---
+
+⚡️ For readers that want to talk about MEV and any other quant related stuff with people, please join my Discord! There’s currently no one on the Discord server, so it’s not too active yet, but I hope to meet new people there! 🌎🪐
+
+https://discord.gg/jjTa8vkP
