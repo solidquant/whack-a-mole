@@ -50,6 +50,34 @@ This research template is an attempt to find alphas within the crypto space.
 
 You can focus on DEX only arbs, CEX only arbs, and also CEX-DEX arbs using this template.
 
+### 🛠 Recent Updates (2023.08.08):
+
+1. **asyncio error**: added nest_asyncio
+2. **.env error**: added some randomly generated sample private keys, addresses for people that want a complete testing environment
+3. **requirements.txt**: web3, flashbots, websockets often times have conflicting versions. You sometimes need to delete their fields in the requirements.txt file and install them manually
+4. **Telegram bot**: updated the code so that the bot runs without having to set the Telegram token in .env
+
+Now with these issues resolved, you can easily test this bot out. It is set to debug, and the private keys are set at random,
+so you don't need to worry! Just run:
+
+```python
+import asyncio
+import nest_asyncio
+
+from strategies.dex_arb_base import main
+
+
+if __name__ == '__main__':
+    nest_asyncio.apply()
+    asyncio.run(main())
+```
+
+This code is in **main.py**.
+
+```bash
+python main.py
+```
+
 ---
 
 Check out my blog post describing in detail what this project attempts to do, and how you can use it.
