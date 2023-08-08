@@ -30,6 +30,20 @@ you should switch to the **examples/strategy/dex_arb_base** branch before runnin
 git checkout examples/strategy/dex_arb_base
 ```
 
+### Example Strategy #2: CEX-DEX arbitrage
+
+#### You said this is a CEX-DEX arbitrage bot, where the f is it?
+
+I know...🥲 I'm still actively researching the CEX-DEX arbitrage space.
+
+Everyone interested in the process can go visit my other repository which is actually a derivative of Whack-A-Mole:
+
+https://github.com/solidquant/cex-dex-arb-research
+
+This research template is an attempt to find alphas within the crypto space.
+
+You can focus on DEX only arbs, CEX only arbs, and also CEX-DEX arbs using this template.
+
 ---
 
 Check out my blog post describing in detail what this project attempts to do, and how you can use it.
