@@ -1,5 +1,3 @@
-<div align="center"><img src="https://github.com/solidquant/whack-a-mole/assets/134243834/cfbbfb43-86ec-4fdc-bac8-fc540830976a"></div>
-
 # Whack-A-Mole
 
 <p align="center">
