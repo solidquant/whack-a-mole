@@ -86,4 +86,4 @@ Check out my blog post describing in detail what this project attempts to do, an
 
 ⚡️ For readers that want to talk about MEV and any other quant related stuff with people, please join my Discord! There’s currently no one on the Discord server, so it’s not too active yet, but I hope to meet new people there! 🌎🪐
 
-https://discord.gg/jjTa8vkP
+https://discord.com/invite/e6KpjTQP98
